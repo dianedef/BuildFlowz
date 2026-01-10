@@ -123,16 +123,13 @@ show_urls() {
         port=$(echo "$line" | cut -d':' -f1)
         name=$(echo "$line" | cut -d':' -f2)
         
-        # Vérifier si le tunnel est actif (chercher le processus autossh avec le port)
-        if pgrep -f "autossh.*-L ${port}:localhost:${port}" > /dev/null 2>&1; then
-            # Vérifier aussi si le port local est en écoute
-            if command -v lsof &> /dev/null && lsof -i :${port} &> /dev/null; then
-                echo -e "  ${GREEN}✓${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${GREEN}[actif]${NC}"
-            elif command -v netstat &> /dev/null && netstat -an | grep -q ":${port}.*LISTEN"; then
-                echo -e "  ${GREEN}✓${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${GREEN}[actif]${NC}"
-            else
-                echo -e "  ${YELLOW}⏳${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${YELLOW}[en cours]${NC}"
-            fi
+        # Vérifier si le port local est accessible (méthode la plus fiable)
+        if command -v nc &> /dev/null && nc -z localhost "$port" 2>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${GREEN}[actif]${NC}"
+        elif command -v lsof &> /dev/null && lsof -i :${port} &> /dev/null; then
+            echo -e "  ${GREEN}✓${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${GREEN}[actif]${NC}"
+        elif curl -s --connect-timeout 1 http://localhost:${port} &> /dev/null; then
+            echo -e "  ${GREEN}✓${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${GREEN}[actif]${NC}"
         else
             echo -e "  ${RED}✗${NC} http://localhost:${port} ${YELLOW}(${name})${NC} ${RED}[tunnel inactif]${NC}"
         fi
@@ -144,10 +141,48 @@ stop_tunnels() {
     echo -e "${BLUE}🛑 Arrêt des tunnels SSH${NC}"
     echo ""
     
-    if pkill -f "autossh.*$REMOTE_HOST" 2>/dev/null; then
-        echo -e "${GREEN}✓ Tunnels arrêtés${NC}"
+    # Afficher les processus avant de les tuer
+    echo -e "${YELLOW}🔍 Recherche des processus SSH...${NC}"
+    
+    PIDS=$(pgrep -f "ssh.*$REMOTE_HOST" 2>/dev/null)
+    
+    if [ -z "$PIDS" ]; then
+        echo -e "${YELLOW}⚠ Aucun processus SSH trouvé avec le pattern 'ssh.*$REMOTE_HOST'${NC}"
+        echo ""
+        echo -e "${BLUE}💡 Processus SSH en cours:${NC}"
+        ps aux | grep ssh | grep -v grep | grep -v ssh-agent
     else
-        echo -e "${YELLOW}⚠ Aucun tunnel actif${NC}"
+        echo -e "${GREEN}✓ Processus trouvés:${NC}"
+        echo "$PIDS" | while read -r pid; do
+            cmd=$(ps -p "$pid" -o command= 2>/dev/null)
+            echo -e "  ${CYAN}PID $pid:${NC} $cmd"
+        done
+        
+        echo ""
+        echo -e "${YELLOW}🔫 Arrêt des processus...${NC}"
+        
+        # Tuer les processus
+        echo "$PIDS" | while read -r pid; do
+            if kill "$pid" 2>/dev/null; then
+                echo -e "  ${GREEN}✓${NC} PID $pid arrêté"
+            else
+                echo -e "  ${RED}✗${NC} Impossible d'arrêter PID $pid"
+            fi
+        done
+        
+        # Attendre un peu
+        sleep 1
+        
+        # Vérifier qu'ils sont bien arrêtés
+        REMAINING=$(pgrep -f "ssh.*$REMOTE_HOST" 2>/dev/null)
+        if [ -n "$REMAINING" ]; then
+            echo ""
+            echo -e "${YELLOW}⚠ Processus restants, utilisation de kill -9...${NC}"
+            echo "$REMAINING" | xargs kill -9 2>/dev/null
+        fi
+        
+        echo ""
+        echo -e "${GREEN}✓ Tunnels arrêtés${NC}"
     fi
 }
 
@@ -156,21 +191,42 @@ show_status() {
     echo -e "${BLUE}📊 Statut des tunnels${NC}"
     echo ""
     
-    PROCESSES=$(ps aux | grep -E "autossh.*$REMOTE_HOST" | grep -v grep)
+    # Chercher les processus autossh OU ssh avec le remote host
+    PROCESSES=$(ps aux | grep -E "(autossh|ssh).*$REMOTE_HOST" | grep -v grep | grep -v "ssh-agent")
     
     if [ -z "$PROCESSES" ]; then
         echo -e "${YELLOW}⚠ Aucun tunnel actif${NC}"
+        echo ""
+        echo -e "${BLUE}💡 Vérification des ports en écoute:${NC}"
+        if command -v lsof &> /dev/null; then
+            lsof -iTCP -sTCP:LISTEN | grep "^ssh" | head -5 || echo "  Aucun port SSH trouvé"
+        elif command -v netstat &> /dev/null; then
+            netstat -an | grep LISTEN | grep "127.0.0.1:" | head -5 || echo "  Aucun port localhost trouvé"
+        fi
     else
-        echo -e "${GREEN}✓ Tunnels actifs :${NC}"
+        echo -e "${GREEN}✓ Processus de tunnels actifs :${NC}"
         echo ""
         
-        # Extraire les ports des tunnels actifs
-        echo "$PROCESSES" | while read -r line; do
-            port=$(echo "$line" | grep -oP '(?<=-L )\d+(?=:localhost)')
-            if [ -n "$port" ]; then
-                echo -e "  ${GREEN}•${NC} localhost:${port}"
-            fi
-        done
+        # Compter les processus
+        COUNT=$(echo "$PROCESSES" | wc -l | tr -d ' ')
+        echo -e "  ${GREEN}•${NC} $COUNT processus SSH/autossh vers $REMOTE_HOST"
+        echo ""
+        
+        # Essayer d'extraire les ports
+        echo -e "${BLUE}💡 Ports locaux en écoute (tunnels):${NC}"
+        if command -v lsof &> /dev/null; then
+            lsof -iTCP -sTCP:LISTEN -P | grep "^ssh" | awk '{print $9}' | grep -o "localhost:[0-9]*" | sort -u | while read -r addr; do
+                port=$(echo "$addr" | cut -d: -f2)
+                echo -e "  ${GREEN}•${NC} http://localhost:${port}"
+            done
+        else
+            echo "$PROCESSES" | while read -r line; do
+                port=$(echo "$line" | grep -oP '(?<=-L )\d+(?=:localhost)' | head -1)
+                if [ -n "$port" ]; then
+                    echo -e "  ${GREEN}•${NC} http://localhost:${port}"
+                fi
+            done
+        fi
     fi
 }
 
