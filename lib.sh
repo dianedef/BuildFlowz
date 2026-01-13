@@ -38,13 +38,39 @@ is_port_in_use() {
     ss -ltn 2>/dev/null | awk '{print $4}' | grep -E "[:.]${port}$" >/dev/null 2>&1
 }
 
+# Get all ports used by PM2 apps (even stopped ones)
+get_all_pm2_ports() {
+    if ! command -v pm2 >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    pm2 jlist 2>/dev/null | python3 -c "
+import sys, json
+try:
+    apps = json.load(sys.stdin)
+    ports = []
+    for app in apps:
+        env_vars = app.get('pm2_env', {}).get('env', {})
+        port = env_vars.get('PORT', '')
+        if port:
+            ports.append(str(port))
+    print(' '.join(ports))
+except:
+    pass
+" 2>/dev/null
+}
+
 find_available_port() {
     local base_port=$1
     local max_range=100
     local port=$base_port
     
+    # Get all ports already assigned in PM2
+    local pm2_ports=$(get_all_pm2_ports)
+    
     while [ $((port - base_port)) -lt $max_range ]; do
-        if ! is_port_in_use $port; then
+        # Check if port is in use OR already assigned in PM2
+        if ! is_port_in_use $port && ! echo "$pm2_ports" | grep -q "\<$port\>"; then
             echo $port
             return 0
         fi
@@ -425,27 +451,30 @@ env_start() {
     echo -e "${BLUE}🚀 Commande: $dev_cmd${NC}"
     
     # Start with PM2 using Flox activation
-    # Create temporary PM2 ecosystem file
-    local pm2_config="/tmp/pm2-${env_name}.json"
+    # Create persistent PM2 ecosystem file in project directory
+    local pm2_config="$project_dir/ecosystem.config.cjs"
     
     # Replace $PORT in dev_cmd with actual port value
     local final_cmd="${dev_cmd//\$PORT/$port}"
     
+    # Create persistent ecosystem file
     cat > "$pm2_config" <<EOF
-{
-  "apps": [{
-    "name": "$env_name",
-    "cwd": "$project_dir",
-    "script": "bash",
-    "args": ["-c", "export PORT=$port && flox activate -- $final_cmd"],
-    "env": {
-      "PORT": "$port"
+module.exports = {
+  apps: [{
+    name: "$env_name",
+    cwd: "$project_dir",
+    script: "bash",
+    args: ["-c", "export PORT=$port && flox activate -- $final_cmd"],
+    env: {
+      PORT: $port
     },
-    "autorestart": true,
-    "watch": false
+    autorestart: true,
+    watch: false
   }]
-}
+};
 EOF
+    
+    echo -e "${GREEN}✅ Fichier ecosystem.config.cjs créé${NC}"
     
     if pm2 list | grep -q "│ $env_name"; then
         echo -e "${YELLOW}⚠️  Projet déjà en cours d'exécution, redémarrage...${NC}"
@@ -453,7 +482,6 @@ EOF
     fi
     
     pm2 start "$pm2_config"
-    rm -f "$pm2_config"
     pm2 save >/dev/null 2>&1
     success "Projet $env_name démarré sur le port $port"
 }
