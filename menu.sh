@@ -18,7 +18,7 @@ gum style \
     "Menu Interactif" "Fait avec gum"
 
 # Menu de sélection
-CHOICE=$(gum choose "Afficher la date" "Infos système" "Créer une note" "Naviguer dans /root" "Docker: Lister les envs" "Docker: Ouvrir URLs" "Docker: Stopper env" "Quitter")
+CHOICE=$(gum choose "Afficher la date" "Infos système" "Créer une note" "Naviguer dans /root" "Docker: Lister les envs" "Docker: Ouvrir URLs" "Docker: Stopper env" "Docker: Créer env" "Publier sur le web" "Quitter")
 
 case $CHOICE in
     "Afficher la date")
@@ -123,6 +123,137 @@ case $CHOICE in
                 gum style --foreground 82 "✅ Environnement $selected arrêté ! (RAM libérée)"
             fi
         fi
+        ;;
+    "Docker: Créer env")
+        gum style --foreground 226 "🚧 Fonctionnalité à venir..."
+        ;;
+    "Publier sur le web")
+        gum style \
+            --foreground 45 --border-foreground 45 --border rounded \
+            --align center --width 50 --padding "0 2" \
+            "Publication Web (Caddy + DuckDNS)"
+        
+        echo ""
+        
+        # Vérifier Caddy
+        if ! command -v caddy &> /dev/null; then
+            gum style --foreground 196 "❌ Caddy n'est pas installé"
+            gum style --foreground 226 "Lancez: sudo ./install.sh"
+            exit 1
+        fi
+        
+        # Vérifier PM2
+        if ! command -v pm2 &> /dev/null; then
+            gum style --foreground 196 "❌ PM2 n'est pas installé"
+            exit 1
+        fi
+        
+        # Récupérer l'IP publique
+        PUBLIC_IP=$(curl -4 -s https://ip.me 2>/dev/null)
+        if [ -z "$PUBLIC_IP" ]; then
+            gum style --foreground 196 "❌ Impossible de récupérer l'IP publique"
+            exit 1
+        fi
+        
+        gum style --foreground 82 "✅ IP publique détectée: $PUBLIC_IP"
+        echo ""
+        
+        # Demander le sous-domaine DuckDNS
+        gum style --foreground 33 "🦆 Configuration DuckDNS"
+        echo ""
+        echo "Votre URL sera: votresubdomain.duckdns.org"
+        echo "Créez un compte gratuit sur https://www.duckdns.org"
+        echo ""
+        
+        SUBDOMAIN=$(gum input --placeholder "Sous-domaine DuckDNS (ex: demo, dev)")
+        if [ -z "$SUBDOMAIN" ]; then
+            gum style --foreground 196 "❌ Sous-domaine requis"
+            exit 1
+        fi
+        
+        echo ""
+        TOKEN=$(gum input --placeholder "Token DuckDNS" --password)
+        if [ -z "$TOKEN" ]; then
+            gum style --foreground 196 "❌ Token requis"
+            exit 1
+        fi
+        
+        echo ""
+        gum spin --spinner dot --title "Mise à jour DuckDNS..." -- curl -s "https://www.duckdns.org/update?domains=$SUBDOMAIN&token=$TOKEN&ip=$PUBLIC_IP" > /dev/null
+        
+        # Vérifier la réponse
+        DUCKDNS_RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=$SUBDOMAIN&token=$TOKEN&ip=$PUBLIC_IP")
+        if [ "$DUCKDNS_RESPONSE" != "OK" ]; then
+            gum style --foreground 196 "❌ Erreur DuckDNS: $DUCKDNS_RESPONSE"
+            gum style --foreground 226 "Vérifiez votre sous-domaine et token"
+            exit 1
+        fi
+        
+        gum style --foreground 82 "✅ DuckDNS configuré: $SUBDOMAIN.duckdns.org → $PUBLIC_IP"
+        echo ""
+        
+        # Récupérer les ports PM2
+        gum style --foreground 33 "📡 Détection des applications PM2..."
+        APPS=$(pm2 jlist 2>/dev/null | python3 -c "
+import sys, json
+try:
+    apps = json.load(sys.stdin)
+    for app in apps:
+        if app['pm2_env']['status'] == 'online':
+            env = app['pm2_env'].get('env', {})
+            port = env.get('PORT') or env.get('port')
+            if port:
+                name = app['name']
+                print(f'{name}:{port}')
+except:
+    pass
+" 2>/dev/null)
+        
+        if [ -z "$APPS" ]; then
+            gum style --foreground 196 "❌ Aucune application PM2 trouvée"
+            exit 1
+        fi
+        
+        # Générer le Caddyfile
+        CADDYFILE="/etc/caddy/Caddyfile"
+        gum spin --spinner dot --title "Génération de la configuration Caddy..." -- sleep 1
+        
+        # Backup de l'ancien fichier
+        if [ -f "$CADDYFILE" ]; then
+            cp "$CADDYFILE" "${CADDYFILE}.backup.$(date +%s)"
+        fi
+        
+        # Créer le nouveau Caddyfile
+        echo "# Auto-généré par BuildFlowz - $(date)" > "$CADDYFILE"
+        echo "" >> "$CADDYFILE"
+        
+        echo "$APPS" | while IFS=: read -r name port; do
+            echo "${SUBDOMAIN}.duckdns.org/${name} {" >> "$CADDYFILE"
+            echo "    reverse_proxy localhost:${port}" >> "$CADDYFILE"
+            echo "}" >> "$CADDYFILE"
+            echo "" >> "$CADDYFILE"
+        done
+        
+        # Recharger Caddy
+        gum spin --spinner dot --title "Rechargement de Caddy..." -- systemctl reload caddy 2>/dev/null || caddy reload --config "$CADDYFILE" 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            gum style --foreground 82 "✅ Caddy configuré et rechargé"
+        else
+            gum style --foreground 196 "⚠️  Erreur lors du rechargement de Caddy"
+            gum style --foreground 226 "Configuration sauvegardée dans $CADDYFILE"
+        fi
+        
+        echo ""
+        gum style --foreground 45 "🌐 URLs disponibles:"
+        echo ""
+        
+        echo "$APPS" | while IFS=: read -r name port; do
+            gum style --foreground 82 "  ✓ https://${SUBDOMAIN}.duckdns.org/${name}"
+        done
+        
+        echo ""
+        gum style --foreground 226 "⚠️  Note: Le certificat HTTPS peut prendre quelques minutes"
         ;;
     "Quitter")
         gum style --foreground 196 "Au revoir! 👋"

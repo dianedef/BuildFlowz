@@ -1,6 +1,6 @@
 # BuildFlowz CLI
 
-Menu interactif pour gérer vos environnements de développement avec Flox + PM2.
+Menu interactif pour gérer vos environnements de développement avec Flox + PM2 + Caddy.
 
 ## 📁 Structure
 
@@ -31,14 +31,21 @@ Contient toute la logique réutilisable :
 Interface utilisateur en mode menu interactif :
 - Navigation dans /root
 - Lister les environnements
-- Afficher les URLs
+- Afficher les URLs (localhost)
 - Stopper un environnement
 - Ouvrir le répertoire de code
 - Déployer un repo GitHub
 - Supprimer un environnement
 - Démarrer un environnement
+- **Publier sur le web** (Caddy + DuckDNS)
 
 ## 🚀 Utilisation
+
+### Installation initiale
+```bash
+cd /root/BuildFlowz
+sudo ./install.sh  # Installe Node.js, PM2, Flox, Caddy, etc.
+```
 
 ### Sur le serveur
 ```bash
@@ -46,7 +53,12 @@ cd /root/BuildFlowz
 ./menu_simple_color.sh
 ```
 
-### Sur votre machine locale
+**Commandes disponibles :**
+- 1-8 : Gestion des environnements locaux
+- **9 : Publier sur le web** (URLs publiques via Caddy + DuckDNS)
+- 10 : Quitter
+
+### Sur votre machine locale (tunnels SSH)
 ```bash
 # Installation (une fois)
 cd ~/BuildFlowz/local-setup
@@ -56,6 +68,10 @@ cd ~/BuildFlowz/local-setup
 urls  # ou tunnel
 # Choisir option 1 pour démarrer les tunnels SSH
 ```
+
+**Deux façons d'accéder à vos apps :**
+- 🔒 **Tunnel SSH** (localhost) : Rapide, privé, pour votre dev quotidien
+- 🌐 **Publication web** : URLs publiques HTTPS pour partager vos projets
 
 ## 🔌 Gestion automatique des ports
 
@@ -78,13 +94,39 @@ BuildFlowz gère automatiquement l'allocation des ports pour éviter les collisi
 ✅ Détection framework et configuration automatique  
 ✅ Allocation intelligente des ports (anti-collision)  
 ✅ Fichiers ecosystem.config.cjs persistants  
-✅ Support tunnels SSH pour accès local  
+✅ Support tunnels SSH pour accès local (dev rapide)  
+✅ **Publication web avec HTTPS** (Caddy + DuckDNS)  
 ✅ Gestion cycle de vie PM2 (start/stop/remove)  
 ✅ Clone et déploiement repos GitHub  
+
+## 🌐 Publication Web (Nouveau !)
+
+Publiez vos applications en ligne avec des URLs HTTPS automatiques :
+
+```bash
+./menu_simple_color.sh → Option 9
+
+🦆 Configuration DuckDNS (gratuit)
+   → Sous-domaine : demo
+   → Token : xxxxx
+
+✅ URLs générées automatiquement :
+   • https://demo.duckdns.org/webinde
+   • https://demo.duckdns.org/winflowz
+```
+
+**Fonctionnalités :**
+- ✅ Certificats HTTPS automatiques (Caddy)
+- ✅ DNS gratuit via DuckDNS (pas de domaine requis)
+- ✅ Détection automatique des apps PM2
+- ✅ Configuration reverse proxy automatique
+- ✅ Backup automatique de la config Caddy
 
 ## 🛠️ Technologies
 
 - **Flox** - Environnements de développement isolés
 - **PM2** - Gestionnaire de processus Node.js
+- **Caddy** - Reverse proxy + HTTPS automatique
+- **DuckDNS** - DNS dynamique gratuit
 - **SSH/autossh** - Tunnels pour accès local
 - **Python/Bash** - Scripts d'automatisation

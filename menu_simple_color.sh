@@ -28,7 +28,8 @@ show_menu() {
     echo -e "  ${CYAN}6)${NC} 🚀 Déployer un repo GitHub"
     echo -e "  ${CYAN}7)${NC} 🗑️  Supprimer un environnement"
     echo -e "  ${CYAN}8)${NC} ▶️  Démarrer un environnement"
-    echo -e "  ${CYAN}9)${NC} ❌ Quitter"
+    echo -e "  ${CYAN}9)${NC} 🌐 Publier sur le web"
+    echo -e "  ${CYAN}10)${NC} ❌ Quitter"
     echo ""
 }
 
@@ -169,7 +170,6 @@ main() {
                         
                         if [ -n "$PORT" ]; then
                             echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                            echo -e "  • ${CYAN}http://164.92.221.78:${PORT}${NC}"
                         else
                             echo -e "${YELLOW}  ⚠️  Projet non démarré ou port non assigné${NC}"
                         fi
@@ -333,7 +333,6 @@ main() {
                     if [ -n "$PORT" ]; then
                         echo -e "${BLUE}🌐 URLs disponibles :${NC}"
                         echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                        echo -e "  • ${CYAN}http://164.92.221.78:${PORT}${NC}"
                         echo ""
                     fi
                     
@@ -425,7 +424,6 @@ main() {
                             if [ -n "$PORT" ]; then
                                 echo -e "${BLUE}🌐 URLs disponibles :${NC}"
                                 echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                                echo -e "  • ${CYAN}http://164.92.221.78:${PORT}${NC}"
                             else
                                 echo -e "${YELLOW}  ⚠️  Port non assigné${NC}"
                             fi
@@ -439,6 +437,135 @@ main() {
                 ;;
 
             9)
+                echo -e "${GREEN}🌐 Publier sur le web${NC}"
+                echo ""
+                
+                # Vérifier Caddy
+                if ! command -v caddy &> /dev/null; then
+                    echo -e "${RED}❌ Caddy n'est pas installé${NC}"
+                    echo -e "${YELLOW}Lancez: sudo ./install.sh${NC}"
+                    continue
+                fi
+                
+                # Vérifier PM2
+                if ! command -v pm2 &> /dev/null; then
+                    echo -e "${RED}❌ PM2 n'est pas installé${NC}"
+                    continue
+                fi
+                
+                # Récupérer l'IP publique
+                echo -e "${BLUE}🔍 Détection de l'IP publique...${NC}"
+                PUBLIC_IP=$(curl -4 -s https://ip.me 2>/dev/null)
+                if [ -z "$PUBLIC_IP" ]; then
+                    echo -e "${RED}❌ Impossible de récupérer l'IP publique${NC}"
+                    continue
+                fi
+                
+                echo -e "${GREEN}✅ IP publique détectée: $PUBLIC_IP${NC}"
+                echo ""
+                
+                # Demander le sous-domaine DuckDNS
+                echo -e "${CYAN}🦆 Configuration DuckDNS${NC}"
+                echo ""
+                echo -e "${BLUE}Votre URL sera: votresubdomain.duckdns.org${NC}"
+                echo -e "${YELLOW}Créez un compte gratuit sur https://www.duckdns.org${NC}"
+                echo ""
+                
+                echo -e "${YELLOW}Sous-domaine DuckDNS (ex: demo, dev) :${NC} \c"
+                read -r SUBDOMAIN
+                if [ -z "$SUBDOMAIN" ]; then
+                    echo -e "${RED}❌ Sous-domaine requis${NC}"
+                    continue
+                fi
+                
+                echo ""
+                echo -e "${YELLOW}Token DuckDNS :${NC} \c"
+                read -rs TOKEN
+                echo ""
+                if [ -z "$TOKEN" ]; then
+                    echo -e "${RED}❌ Token requis${NC}"
+                    continue
+                fi
+                
+                echo ""
+                echo -e "${BLUE}📡 Mise à jour DuckDNS...${NC}"
+                DUCKDNS_RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=$SUBDOMAIN&token=$TOKEN&ip=$PUBLIC_IP")
+                
+                if [ "$DUCKDNS_RESPONSE" != "OK" ]; then
+                    echo -e "${RED}❌ Erreur DuckDNS: $DUCKDNS_RESPONSE${NC}"
+                    echo -e "${YELLOW}Vérifiez votre sous-domaine et token${NC}"
+                    continue
+                fi
+                
+                echo -e "${GREEN}✅ DuckDNS configuré: $SUBDOMAIN.duckdns.org → $PUBLIC_IP${NC}"
+                echo ""
+                
+                # Récupérer les ports PM2
+                echo -e "${BLUE}📡 Détection des applications PM2...${NC}"
+                APPS=$(pm2 jlist 2>/dev/null | python3 -c "
+import sys, json
+try:
+    apps = json.load(sys.stdin)
+    for app in apps:
+        if app['pm2_env']['status'] == 'online':
+            env = app['pm2_env'].get('env', {})
+            port = env.get('PORT') or env.get('port')
+            if port:
+                name = app['name']
+                print(f'{name}:{port}')
+except:
+    pass
+" 2>/dev/null)
+                
+                if [ -z "$APPS" ]; then
+                    echo -e "${RED}❌ Aucune application PM2 trouvée${NC}"
+                    continue
+                fi
+                
+                # Générer le Caddyfile
+                CADDYFILE="/etc/caddy/Caddyfile"
+                echo -e "${BLUE}📝 Génération de la configuration Caddy...${NC}"
+                
+                # Backup de l'ancien fichier
+                if [ -f "$CADDYFILE" ]; then
+                    sudo cp "$CADDYFILE" "${CADDYFILE}.backup.$(date +%s)"
+                fi
+                
+                # Créer le nouveau Caddyfile
+                {
+                    echo "# Auto-généré par BuildFlowz - $(date)"
+                    echo ""
+                    
+                    echo "$APPS" | while IFS=: read -r name port; do
+                        echo "${SUBDOMAIN}.duckdns.org/${name} {"
+                        echo "    reverse_proxy localhost:${port}"
+                        echo "}"
+                        echo ""
+                    done
+                } | sudo tee "$CADDYFILE" > /dev/null
+                
+                # Recharger Caddy
+                echo -e "${BLUE}🔄 Rechargement de Caddy...${NC}"
+                if sudo systemctl reload caddy 2>/dev/null || sudo caddy reload --config "$CADDYFILE" 2>/dev/null; then
+                    echo -e "${GREEN}✅ Caddy configuré et rechargé${NC}"
+                else
+                    echo -e "${YELLOW}⚠️  Erreur lors du rechargement de Caddy${NC}"
+                    echo -e "${YELLOW}Configuration sauvegardée dans $CADDYFILE${NC}"
+                fi
+                
+                echo ""
+                echo -e "${GREEN}🌐 URLs disponibles:${NC}"
+                echo ""
+                
+                echo "$APPS" | while IFS=: read -r name port; do
+                    echo -e "  ${CYAN}✓ https://${SUBDOMAIN}.duckdns.org/${name}${NC}"
+                done
+                
+                echo ""
+                echo -e "${YELLOW}⚠️  Note: Le certificat HTTPS peut prendre quelques minutes${NC}"
+                ;;
+
+            10)
                 echo -e "${GREEN}👋 Au revoir !${NC}"
                 exit 0
                 ;;

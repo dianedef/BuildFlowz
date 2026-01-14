@@ -184,7 +184,29 @@ fi
 
 echo ""
 
-# 8. Créer le répertoire de configuration
+# 8. Installer Caddy (pour publication web)
+if command -v caddy >/dev/null 2>&1; then
+    CADDY_VERSION=$(caddy version | head -n1)
+    success "Caddy déjà installé: $CADDY_VERSION"
+else
+    info "Installation de Caddy..."
+    apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl >/dev/null 2>&1
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
+    apt-get update >/dev/null 2>&1
+    apt-get install -y caddy >/dev/null 2>&1
+    
+    if command -v caddy >/dev/null 2>&1; then
+        success "Caddy installé: $(caddy version | head -n1)"
+    else
+        error "Échec de l'installation de Caddy"
+        warning "Installation manuelle requise: https://caddyserver.com/docs/install"
+    fi
+fi
+
+echo ""
+
+# 9. Créer le répertoire de configuration
 DOKPLOY_DIR="/etc/dokploy/compose"
 if [ ! -d "$DOKPLOY_DIR" ]; then
     info "Création du répertoire de configuration..."
@@ -216,6 +238,7 @@ echo -e "  • Node.js: $(command -v node >/dev/null 2>&1 && echo '✅' || echo 
 echo -e "  • PM2: $(command -v pm2 >/dev/null 2>&1 && echo '✅' || echo '❌')"
 echo -e "  • Flox: $(command -v flox >/dev/null 2>&1 && echo '✅' || echo '⚠️ Installation manuelle requise')"
 echo -e "  • GitHub CLI: $(command -v gh >/dev/null 2>&1 && echo '✅' || echo '❌')"
+echo -e "  • Caddy: $(command -v caddy >/dev/null 2>&1 && echo '✅' || echo '⚠️ Installation manuelle requise')"
 echo -e "  • Python3: $(command -v python3 >/dev/null 2>&1 && echo '✅' || echo '❌')"
 echo -e "  • PyYAML: $(python3 -c 'import yaml' 2>/dev/null && echo '✅' || echo '❌')"
 echo -e "  • Git: $(command -v git >/dev/null 2>&1 && echo '✅' || echo '❌')"
