@@ -21,16 +21,15 @@ show_menu() {
     echo -e "${GREEN}Choisissez une option :${NC}"
     echo ""
     echo -e "  ${CYAN}1)${NC} 📁 Naviguer dans /root"
-    echo -e "  ${CYAN}2)${NC} 📋 Lister les environnements"
-    echo -e "  ${CYAN}3)${NC} 🌐 Afficher les URLs"
-    echo -e "  ${CYAN}4)${NC} 🛑 Stopper un environnement"
-    echo -e "  ${CYAN}5)${NC} 📝 Ouvrir le répertoire de code"
-    echo -e "  ${CYAN}6)${NC} 🚀 Déployer un repo GitHub"
-    echo -e "  ${CYAN}7)${NC} 🗑️  Supprimer un environnement"
-    echo -e "  ${CYAN}8)${NC} ▶️  Démarrer un environnement (détecté)"
-    echo -e "  ${CYAN}9)${NC} ▶️  Démarrer un environnement (chemin personnalisé)"
-    echo -e "  ${CYAN}10)${NC} 🌐 Publier sur le web"
-    echo -e "  ${CYAN}11)${NC} ❌ Quitter"
+    echo -e "  ${CYAN}2)${NC} 📋 Lister les environnements et URLs"
+    echo -e "  ${CYAN}3)${NC} 🛑 Stopper un environnement"
+    echo -e "  ${CYAN}4)${NC} 📝 Ouvrir le répertoire de code"
+    echo -e "  ${CYAN}5)${NC} 🚀 Déployer un repo GitHub"
+    echo -e "  ${CYAN}6)${NC} 🗑️  Supprimer un environnement"
+    echo -e "  ${CYAN}7)${NC} ▶️  Démarrer un environnement (détecté)"
+    echo -e "  ${CYAN}8)${NC} ▶️  Démarrer un environnement (chemin personnalisé)"
+    echo -e "  ${CYAN}9)${NC} 🌐 Publier sur le web"
+    echo -e "  ${CYAN}10)${NC} ❌ Quitter"
     echo ""
 }
 
@@ -87,7 +86,7 @@ main() {
                 fi
                 ;;
             2)
-                echo -e "${GREEN}📋 Environnements actifs${NC}"
+                echo -e "${GREEN}📋 Environnements actifs et URLs${NC}"
                 echo "Chargement..."
                 sleep 0.5
 
@@ -99,7 +98,7 @@ main() {
                     echo ""
                     while IFS= read -r name; do
                         pm2_status=$(get_pm2_status "$name")
-                        project_dir=$(resolve_project_path "$name")
+                        PROJECT_DIR=$(resolve_project_path "$name")
                         
                         # Afficher le statut avec la bonne couleur
                         case "$pm2_status" in
@@ -115,74 +114,35 @@ main() {
                             "pm2-not-installed")
                                 echo -e "${RED}❌ [PM2 NOT INSTALLED] $name${NC}"
                                 ;;
+                            "not-found")
+                                echo -e "${CYAN}⚪ [NOT-FOUND] $name${NC}"
+                                ;;
                             *)
                                 echo -e "${CYAN}⚪ [${pm2_status^^}] $name${NC}"
                                 ;;
                         esac
                         
                         # Afficher le répertoire du projet
-                        PROJECT_DIR=$(resolve_project_path "$name")
                         if [ -n "$PROJECT_DIR" ]; then
                             echo -e "${BLUE}   📂 $PROJECT_DIR${NC}"
                             
                             # Afficher si environnement Flox présent
                             if [ -d "$PROJECT_DIR/.flox" ]; then
-                            echo -e "${GREEN}   ✅ Flox activé${NC}"
+                                echo -e "${GREEN}   ✅ Flox activé${NC}"
                             fi
                         fi
                         
-                        # Afficher le port si disponible
+                        # Afficher le port et URL si disponible
                         local port=$(get_port_from_pm2 "$name")
                         if [ -n "$port" ]; then
                             echo -e "${CYAN}   🔌 Port: $port${NC}"
+                            echo -e "${CYAN}   🌐 URL: http://localhost:$port${NC}"
                         fi
                         echo ""
                     done <<< "$ALL_ENVS"
                 fi
                 ;;
             3)
-                echo -e "${GREEN}🌐 URLs des environnements${NC}"
-                ALL_ENVS=$(list_all_environments)
-
-                if [ -z "$ALL_ENVS" ]; then
-                    echo -e "${RED}❌ Aucun environnement trouvé${NC}"
-                else
-                    echo -e "${BLUE}Environnements disponibles :${NC}"
-                    echo ""
-                    i=1
-                    while IFS= read -r env; do
-                        echo -e "  ${CYAN}$i)${NC} $env"
-                        ((i++))
-                    done <<< "$ALL_ENVS"
-                    echo ""
-                    echo -e "  ${CYAN}0)${NC} Annuler"
-                    echo ""
-                    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c"
-                    read -r choice
-
-                    if [[ "$choice" == "0" ]]; then
-                        echo -e "${BLUE}❌ Annulé${NC}"
-                    elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                        ENV_NAME=$(echo "$ALL_ENVS" | sed -n "${choice}p")
-                        PROJECT_DIR=$(resolve_project_path "$ENV_NAME") # Resolve project dir
-                        PM2_APP_NAME=$(basename "$PROJECT_DIR") # Get the actual PM2 app name
-
-                        echo ""
-                        echo -e "${GREEN}🌐 URLs pour $ENV_NAME :${NC}"
-                        
-                        PORT=$(get_port_from_pm2 "$PM2_APP_NAME")
-                        
-                        if [ -n "$PORT" ]; then
-                            echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                        else
-                            echo -e "${YELLOW}  ⚠️  Projet non démarré ou port non assigné${NC}"
-                        fi
-                    else
-                        echo -e "${RED}❌ Choix invalide${NC}"
-                    fi
-                fi
-                ;;
-            4)
                 echo -e "${GREEN}🛑 Stopper un environnement${NC}"
                 ALL_ENVS=$(list_all_environments)
 
@@ -215,7 +175,7 @@ main() {
                     fi
                 fi
                 ;;
-            5)
+            4)
                 echo -e "${GREEN}📝 Ouvrir le répertoire de code${NC}"
                 ALL_ENVS=$(list_all_environments)
 
@@ -249,7 +209,7 @@ main() {
                     fi
                 fi
                 ;;
-            6)
+            5)
                 echo -e "${GREEN}🚀 Déployer un repo GitHub${NC}"
                 echo "Fonctionnalité disponible ! 🚀"
 
@@ -346,7 +306,7 @@ main() {
                     echo -e "${RED}❌ Choix invalide${NC}"
                 fi
                 ;;
-            7)
+            6)
                 echo -e "${GREEN}🗑️  Supprimer un environnement${NC}"
                 ALL_ENVS=$(list_all_environments)
 
@@ -387,7 +347,7 @@ main() {
                 fi
                 ;;
 
-            8)
+            7)
                 echo -e "${GREEN}▶️  Démarrer un environnement (détecté)${NC}"
                 ALL_ENVS=$(list_all_environments)
 
@@ -441,7 +401,7 @@ main() {
                 fi
                 ;;
 
-            9)
+            8)
                 echo -e "${GREEN}▶️  Démarrer un environnement (chemin personnalisé)${NC}"
                 echo ""
                 echo -e "${YELLOW}Entrez le chemin absolu du projet (ex: /root/my-robots/chatbot) :${NC} \c"
@@ -473,7 +433,7 @@ main() {
                 fi
                 ;;
 
-            10)
+            9)
                 echo -e "${GREEN}🌐 Publier sur le web${NC}"
                 echo ""
                 
@@ -602,7 +562,7 @@ except:
                 echo -e "${YELLOW}⚠️  Note: Le certificat HTTPS peut prendre quelques minutes${NC}"
                 ;;
 
-            11)
+            10)
                 echo -e "${GREEN}👋 Au revoir !${NC}"
                 exit 0
                 ;;
