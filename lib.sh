@@ -495,9 +495,13 @@ env_start() {
     fi
 
     local port=""
-    # Check for existing port in ecosystem.config.cjs
+    local doppler_prefix=""
+    # Check for existing port and doppler in ecosystem.config.cjs
     if [ -f "$pm2_config" ]; then
         port=$(cat "$pm2_config" | grep -oP 'PORT: \K[0-9]+' | head -1)
+        if grep -q "doppler run" "$pm2_config"; then
+            doppler_prefix="doppler run -- "
+        fi
     fi
 
     # If no persistent port found, find an available one
@@ -521,7 +525,7 @@ module.exports = {
     name: "$env_name",
     cwd: "$project_dir",
     script: "bash",
-    args: ["-c", "export PORT=$port && flox activate -- $final_cmd"],
+    args: ["-c", "export PORT=$port && flox activate ${doppler_prefix}$final_cmd"],
     env: {
       PORT: $port
     },
