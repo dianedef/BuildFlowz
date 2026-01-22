@@ -380,8 +380,8 @@ fix_port_config() {
             if grep -q "server.*:.*{" "$config_file" && grep -q "port.*:.*[0-9]" "$config_file"; then
                 sed -i 's/port: *[0-9]\+/port: parseInt(process.env.PORT) || 3000/' "$config_file"
                 echo -e "${GREEN}✅ Configuration Vite mise à jour${NC}"
-            elif ! grep -q "server.*:" "$config_file"; then
-                sed -i '/export default defineConfig({/a\  server: {\n    port: parseInt(process.env.PORT) || 3000\n  },' "$config_file"
+            elif grep -q "export default defineConfig({" "$config_file"; then
+                sed -i '/export default defineConfig({/a\  server: {\n    port: parseInt(process.env.PORT) || 3000,\n    host: true\n  },' "$config_file"
                 echo -e "${GREEN}✅ Configuration Vite ajoutée${NC}"
             fi
         fi
@@ -433,7 +433,11 @@ detect_dev_command() {
                     echo "$pm_cmd dev -p \$PORT"
                     ;;
                 vite)
-                    echo "$pm_cmd dev -- --port \$PORT"
+                    if grep -q '"preview":' package.json; then
+                        echo "$pm_cmd preview -- --port \$PORT --host"
+                    else
+                        echo "$pm_cmd dev -- --port \$PORT --host"
+                    fi
                     ;;
                 nuxt)
                     echo "$pm_cmd dev --port \$PORT"
@@ -525,7 +529,7 @@ module.exports = {
     name: "$env_name",
     cwd: "$project_dir",
     script: "bash",
-    args: ["-c", "export PORT=$port && flox activate ${doppler_prefix}$final_cmd"],
+    args: ["-c", "export PORT=$port && flox activate -- ${doppler_prefix}$final_cmd"],
     env: {
       PORT: $port
     },
@@ -538,8 +542,10 @@ EOF
     echo -e "${GREEN}✅ Fichier ecosystem.config.cjs créé/mis à jour${NC}"
     
     if pm2 list | grep -q "│ $env_name"; then
-        echo -e "${YELLOW}⚠️  Projet déjà en cours d'exécution, redémarrage...${NC}"
+        echo -e "${YELLOW}⚠️  Projet déjà en cours d'exécution, nettoyage...${NC}"
         pm2 delete "$env_name" >/dev/null 2>&1
+        # Kill any lingering processes on the port to avoid zombies
+        fuser -k "$port/tcp" >/dev/null 2>&1 || true
     fi
     
     pm2 start "$pm2_config"
