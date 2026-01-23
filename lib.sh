@@ -379,10 +379,14 @@ fix_port_config() {
             
             if grep -q "server.*:.*{" "$config_file" && grep -q "port.*:.*[0-9]" "$config_file"; then
                 sed -i 's/port: *[0-9]\+/port: parseInt(process.env.PORT) || 3000/' "$config_file"
-                echo -e "${GREEN}✅ Configuration Vite mise à jour${NC}"
+                # Add HMR configuration if not present
+                if ! grep -q "hmr.*:.*{" "$config_file"; then
+                    sed -i '/server.*:.*{/a\    hmr: {\n      protocol: '\''ws'\'',\n      host: '\''localhost'\'',\n      port: parseInt(process.env.PORT) || 3000\n    },' "$config_file"
+                fi
+                echo -e "${GREEN}✅ Configuration Vite mise à jour avec HMR${NC}"
             elif grep -q "export default defineConfig({" "$config_file"; then
-                sed -i '/export default defineConfig({/a\  server: {\n    port: parseInt(process.env.PORT) || 3000,\n    host: true\n  },' "$config_file"
-                echo -e "${GREEN}✅ Configuration Vite ajoutée${NC}"
+                sed -i '/export default defineConfig({/a\  server: {\n    port: parseInt(process.env.PORT) || 3000,\n    host: true,\n    hmr: {\n      protocol: '\''ws'\'',\n      host: '\''localhost'\'',\n      port: parseInt(process.env.PORT) || 3000\n    }\n  },' "$config_file"
+                echo -e "${GREEN}✅ Configuration Vite ajoutée avec HMR${NC}"
             fi
         fi
     fi
@@ -433,11 +437,7 @@ detect_dev_command() {
                     echo "$pm_cmd dev -p \$PORT"
                     ;;
                 vite)
-                    if grep -q '"preview":' package.json; then
-                        echo "$pm_cmd preview -- --port \$PORT --host"
-                    else
-                        echo "$pm_cmd dev -- --port \$PORT --host"
-                    fi
+                    echo "$pm_cmd dev -- --port \$PORT --host"
                     ;;
                 nuxt)
                     echo "$pm_cmd dev --port \$PORT"
