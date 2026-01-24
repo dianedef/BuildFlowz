@@ -13,6 +13,23 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SSH_CONFIG="$HOME/.ssh/config"
 SHELL_RC="$HOME/.bashrc"
 
+# Détecter le système d'exploitation
+IS_WSL=false
+IS_WINDOWS=false
+IS_MACOS=false
+IS_LINUX=false
+
+if grep -qEi "(Microsoft|WSL)" /proc/version &> /dev/null; then
+    IS_WSL=true
+    IS_WINDOWS=true
+elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    IS_WINDOWS=true
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    IS_MACOS=true
+else
+    IS_LINUX=true
+fi
+
 # Détecter le shell (bash ou zsh)
 if [ -n "$ZSH_VERSION" ]; then
     SHELL_RC="$HOME/.zshrc"
@@ -23,15 +40,38 @@ fi
 echo -e "${BLUE}🚀 Installation BuildFlowz - Configuration Locale${NC}"
 echo ""
 
+# Afficher le système détecté
+if [ "$IS_WSL" = true ]; then
+    echo -e "${GREEN}✓ Système détecté: Windows WSL${NC}"
+elif [ "$IS_WINDOWS" = true ]; then
+    echo -e "${YELLOW}⚠ Système détecté: Windows (Git Bash)${NC}"
+    echo -e "${YELLOW}  Pour une meilleure expérience, utilisez WSL (Windows Subsystem for Linux)${NC}"
+    echo ""
+elif [ "$IS_MACOS" = true ]; then
+    echo -e "${GREEN}✓ Système détecté: macOS${NC}"
+else
+    echo -e "${GREEN}✓ Système détecté: Linux${NC}"
+fi
+echo ""
+
 # 1. Vérifier autossh
 echo -e "${BLUE}1. Vérification des dépendances...${NC}"
 if ! command -v autossh &> /dev/null; then
     echo -e "${RED}   ✗ autossh non installé${NC}"
     echo -e "${YELLOW}   Installation requise:${NC}"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
+
+    if [ "$IS_MACOS" = true ]; then
         echo -e "${YELLOW}     brew install autossh${NC}"
+    elif [ "$IS_WSL" = true ]; then
+        echo -e "${YELLOW}     sudo apt update && sudo apt install autossh${NC}"
+    elif [ "$IS_WINDOWS" = true ]; then
+        echo -e "${RED}   ⚠️  Git Bash ne supporte pas autossh nativement${NC}"
+        echo -e "${YELLOW}   Solutions recommandées:${NC}"
+        echo -e "${YELLOW}   1. Installer WSL: https://aka.ms/wsl${NC}"
+        echo -e "${YELLOW}   2. Utiliser PowerShell avec OpenSSH (voir install_local.ps1)${NC}"
+        echo -e "${YELLOW}   3. Utiliser un client SSH graphique (PuTTY, MobaXterm)${NC}"
     else
-        echo -e "${YELLOW}     sudo apt install autossh${NC}"
+        echo -e "${YELLOW}     sudo apt update && sudo apt install autossh${NC}"
     fi
     exit 1
 fi

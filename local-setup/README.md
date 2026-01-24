@@ -16,10 +16,17 @@ brew install autossh
 sudo apt install autossh
 ```
 
+**Windows :**
+Voir [README_WINDOWS.md](./README_WINDOWS.md) pour les 3 options disponibles:
+- ✅ **WSL** (recommandé) - Support complet avec menu interactif
+- ⚡ **PowerShell** - Simple avec OpenSSH natif
+- 🔧 **Git Bash** - Environnement bash familier
+
 ## 🔧 Installation Automatique
 
 ### Installation rapide (recommandé)
 
+**Linux / macOS / WSL:**
 ```bash
 # Cloner le repo
 git clone <votre-repo> ~/BuildFlowz
@@ -32,10 +39,24 @@ cd ~/BuildFlowz/local-setup
 source ~/.bashrc  # ou source ~/.zshrc
 ```
 
+**Windows (PowerShell):**
+```powershell
+# Cloner le repo
+git clone <votre-repo> $env:USERPROFILE\BuildFlowz
+cd $env:USERPROFILE\BuildFlowz\local-setup
+
+# Lancer l'installation
+.\install_local.ps1
+
+# Recharger le profil
+. $PROFILE
+```
+
 Le script installe automatiquement :
 - ✅ Configuration SSH (IP: 5.75.134.202)
 - ✅ Alias shell : `urls`, `tunnel`
-- ✅ Menu interactif pour gérer les tunnels
+- ✅ Menu interactif pour gérer les tunnels (Linux/macOS/WSL)
+- ✅ Script de tunnel pour Windows PowerShell
 - ✅ Permissions exécutables
 
 ### Installation manuelle (optionnelle)
