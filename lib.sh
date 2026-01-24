@@ -1404,4 +1404,248 @@ env_remove() {
     return 0
 }
 
+# -----------------------------------------------------------------------------
+# show_dashboard - Display comprehensive dashboard with all environments
+#
+# Description:
+#   Shows a unified view combining environment list, ports, status, and URLs.
+#   Replaces separate "List environments" and "Show URLs" commands for better UX.
+#   Displays local URLs (localhost) and web URLs (DuckDNS) in one view.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#   1 - No environments found
+#
+# Outputs:
+#   Formatted dashboard to stdout with environment status, ports, and URLs
+#
+# Example:
+#   show_dashboard
+# -----------------------------------------------------------------------------
+show_dashboard() {
+    echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}            ${YELLOW}Environment Dashboard${NC}             ${CYAN}║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Get all environments
+    local all_envs=$(list_all_environments)
+
+    if [ -z "$all_envs" ]; then
+        echo -e "${YELLOW}⚠️  No environments found${NC}"
+        echo ""
+        echo -e "${BLUE}💡 Tip: Use 'Start/Deploy' to create a new environment${NC}"
+        return 1
+    fi
+
+    # Display environments with status
+    echo -e "${GREEN}📊 Active Environments:${NC}"
+    echo ""
+
+    local count=0
+    while IFS= read -r name; do
+        ((count++))
+        local status=$(get_pm2_status "$name")
+        local port=$(get_port_from_pm2 "$name")
+        local project_dir=$(resolve_project_path "$name")
+
+        # Status indicator
+        local status_icon
+        local status_color
+        if [ "$status" = "online" ]; then
+            status_icon="🟢"
+            status_color="${GREEN}"
+        elif [ "$status" = "stopped" ]; then
+            status_icon="🟡"
+            status_color="${YELLOW}"
+        elif [ "$status" = "errored" ] || [ "$status" = "error" ]; then
+            status_icon="🔴"
+            status_color="${RED}"
+        else
+            status_icon="⚪"
+            status_color="${NC}"
+        fi
+
+        # Display environment info
+        printf "  %s %-20s" "$status_icon" "$name"
+
+        if [ -n "$port" ]; then
+            printf "${BLUE}Port: %-6s${NC}" ":$port"
+            printf "${CYAN}http://localhost:$port${NC}"
+        else
+            printf "${YELLOW}No port${NC}"
+        fi
+
+        echo ""
+    done <<< "$all_envs"
+
+    echo ""
+    echo -e "${BLUE}Total: $count environment(s)${NC}"
+
+    # Check for web URLs (Caddyfile)
+    if [ -f "/etc/caddy/Caddyfile" ]; then
+        echo ""
+        echo -e "${GREEN}🌐 Web URLs (HTTPS):${NC}"
+        echo ""
+
+        # Parse Caddyfile for domains
+        local domains=$(grep -E "^[a-zA-Z0-9\-]+\.duckdns\.org" /etc/caddy/Caddyfile 2>/dev/null | sort -u)
+
+        if [ -n "$domains" ]; then
+            while IFS= read -r domain; do
+                echo -e "  ${CYAN}https://$domain${NC}"
+            done <<< "$domains"
+        else
+            echo -e "  ${YELLOW}No web URLs configured${NC}"
+        fi
+    fi
+
+    echo ""
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# env_restart - Restart an environment
+#
+# Description:
+#   Restarts a PM2 environment in one step (stop + start).
+#   Faster than manual stop → start workflow.
+#   Invalidates PM2 cache to ensure fresh data.
+#
+# Arguments:
+#   $1 - Environment identifier (name or path)
+#
+# Returns:
+#   0 - Successfully restarted
+#   1 - Error occurred
+#
+# Outputs:
+#   Status messages to stdout
+#
+# Side Effects:
+#   - Restarts PM2 process
+#   - Invalidates PM2 cache
+#   - Saves PM2 state
+#
+# Example:
+#   env_restart "my-app"
+#   env_restart "/root/my-app"
+# -----------------------------------------------------------------------------
+env_restart() {
+    local identifier=$1
+
+    if [ -z "$identifier" ]; then
+        error "Usage: env_restart <environment-name-or-path>"
+        return 1
+    fi
+
+    # Resolve project directory
+    local project_dir=$(resolve_project_path "$identifier")
+    if [ -z "$project_dir" ]; then
+        error "Environment not found: $identifier"
+        return 1
+    fi
+
+    local env_name=$(basename "$project_dir")
+
+    echo -e "${BLUE}🔄 Restarting environment: $env_name${NC}"
+    log INFO "Restarting environment: $env_name"
+
+    # Check if environment exists in PM2
+    local status=$(get_pm2_status "$env_name")
+
+    if [ "$status" = "not_found" ]; then
+        warning "Environment $env_name not running in PM2"
+        echo -e "${YELLOW}Starting instead...${NC}"
+        env_start "$project_dir"
+        return $?
+    fi
+
+    # Restart PM2 process (atomic operation)
+    if pm2 restart "$env_name" >/dev/null 2>&1; then
+        pm2 save >/dev/null 2>&1
+        invalidate_pm2_cache
+
+        local port=$(get_port_from_pm2 "$env_name")
+        success "Environment $env_name restarted successfully"
+
+        if [ -n "$port" ]; then
+            echo -e "${GREEN}✅ URL: ${CYAN}http://localhost:$port${NC}"
+        fi
+
+        log INFO "Successfully restarted: $env_name"
+        return 0
+    else
+        error "Failed to restart $env_name"
+        log ERROR "Failed to restart: $env_name"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# view_environment_logs - Display PM2 logs for an environment
+#
+# Description:
+#   Shows the last 50 lines of PM2 logs for debugging and monitoring.
+#   Useful for troubleshooting errors and checking application output.
+#
+# Arguments:
+#   $1 - Environment identifier (name or path)
+#   $2 - Number of lines to show (optional, default: 50)
+#
+# Returns:
+#   0 - Successfully displayed logs
+#   1 - Error occurred
+#
+# Outputs:
+#   PM2 logs to stdout
+#
+# Example:
+#   view_environment_logs "my-app"
+#   view_environment_logs "my-app" 100
+# -----------------------------------------------------------------------------
+view_environment_logs() {
+    local identifier=$1
+    local lines=${2:-50}
+
+    if [ -z "$identifier" ]; then
+        error "Usage: view_environment_logs <environment-name-or-path> [lines]"
+        return 1
+    fi
+
+    # Resolve project directory
+    local project_dir=$(resolve_project_path "$identifier")
+    if [ -z "$project_dir" ]; then
+        error "Environment not found: $identifier"
+        return 1
+    fi
+
+    local env_name=$(basename "$project_dir")
+
+    # Check if environment exists in PM2
+    local status=$(get_pm2_status "$env_name")
+
+    if [ "$status" = "not_found" ]; then
+        error "Environment $env_name not found in PM2"
+        return 1
+    fi
+
+    echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}  ${YELLOW}Logs: $env_name${NC} (last $lines lines)         ${CYAN}║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Display logs
+    pm2 logs "$env_name" --lines "$lines" --nostream
+
+    echo ""
+    echo -e "${BLUE}💡 Tip: Use Ctrl+C to stop, or 'pm2 logs $env_name' for live tail${NC}"
+    echo ""
+
+    return 0
+}
+
 

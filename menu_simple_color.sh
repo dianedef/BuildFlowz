@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Menu Ultra-Simple - Version Texte Pure
-# Menu fonctionnel sans dépendances graphiques
+# BuildFlowz Menu - Streamlined UX (Phase 1)
+# Reduced from 10 options to 7 for better usability
 
 # Load shared library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,7 +10,7 @@ source "$SCRIPT_DIR/lib.sh"
 # Fonction d'affichage avec couleurs
 print_header() {
     echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}                ${YELLOW}DevServer Menu${NC}               ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}              ${YELLOW}BuildFlowz DevServer${NC}             ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}           ${BLUE}Development Environment${NC}          ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -18,28 +18,170 @@ print_header() {
 
 # Fonction d'affichage du menu
 show_menu() {
-    echo -e "${GREEN}Choisissez une option :${NC}"
+    echo -e "${BLUE}📊 OVERVIEW${NC}"
+    echo -e "  ${CYAN}1)${NC} Dashboard - View all environments at once"
     echo ""
-    echo -e "  ${CYAN}1)${NC} 📁 Naviguer dans /root"
-    echo -e "  ${CYAN}2)${NC} 📋 Lister les environnements et URLs"
-    echo -e "  ${CYAN}3)${NC} 🛑 Stopper un environnement"
-    echo -e "  ${CYAN}4)${NC} 📝 Ouvrir le répertoire de code"
-    echo -e "  ${CYAN}5)${NC} 🚀 Déployer un repo GitHub"
-    echo -e "  ${CYAN}6)${NC} 🗑️  Supprimer un environnement"
-    echo -e "  ${CYAN}7)${NC} ▶️  Démarrer un environnement (détecté)"
-    echo -e "  ${CYAN}8)${NC} ▶️  Démarrer un environnement (chemin personnalisé)"
-    echo -e "  ${CYAN}9)${NC} 🌐 Publier sur le web"
-    echo -e "  ${CYAN}10)${NC} ❌ Quitter"
+    echo -e "${BLUE}🚀 MANAGE${NC}"
+    echo -e "  ${CYAN}2)${NC} Start/Deploy - Launch or deploy environment"
+    echo -e "  ${CYAN}3)${NC} Restart - Restart an environment"
+    echo -e "  ${CYAN}4)${NC} Stop - Stop an environment"
+    echo -e "  ${CYAN}5)${NC} Remove - Delete an environment"
+    echo ""
+    echo -e "${BLUE}🌐 PUBLISHING${NC}"
+    echo -e "  ${CYAN}6)${NC} Publish to Web - Configure HTTPS (Caddy + DuckDNS)"
+    echo ""
+    echo -e "${BLUE}⚙️  ADVANCED${NC}"
+    echo -e "  ${CYAN}7)${NC} More Options - Logs, Navigate, Settings..."
+    echo ""
+    echo -e "  ${CYAN}0)${NC} Exit"
     echo ""
 }
 
-# Fonction de saisie
-input() {
-    local prompt="$1"
-    local default="$2"
-    echo -e "${YELLOW}$prompt${NC} \c"
-    read -r result
-    echo "${result:-$default}"
+# Fonction de sélection d'environnement
+select_environment() {
+    local prompt_text="${1:-Sélectionnez un environnement}"
+
+    ALL_ENVS=$(list_all_environments)
+
+    if [ -z "$ALL_ENVS" ]; then
+        echo -e "${RED}❌ Aucun environnement trouvé${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}$prompt_text :${NC}"
+    echo ""
+
+    i=1
+    while IFS= read -r env; do
+        echo -e "  ${CYAN}$i)${NC} $env"
+        ((i++))
+    done <<< "$ALL_ENVS"
+
+    echo ""
+    echo -e "  ${CYAN}0)${NC} Annuler"
+    echo ""
+    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c"
+    read -r choice
+
+    if [[ "$choice" == "0" ]]; then
+        return 1
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
+        echo "$ALL_ENVS" | sed -n "${choice}p"
+        return 0
+    else
+        echo -e "${RED}❌ Choix invalide${NC}"
+        return 1
+    fi
+}
+
+# Submenu "More Options"
+show_advanced_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║${NC}              ${YELLOW}Advanced Options${NC}                 ${CYAN}║${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+        echo ""
+
+        echo -e "${GREEN}Choose an option:${NC}"
+        echo ""
+        echo -e "  ${CYAN}1)${NC} 📝 View Logs - Display application logs"
+        echo -e "  ${CYAN}2)${NC} 📁 Navigate Projects - Browse /root directory"
+        echo -e "  ${CYAN}3)${NC} 📂 Open Code Directory - cd into project"
+        echo -e "  ${CYAN}4)${NC} 🔍 Toggle Web Inspector - Enable/disable browser inspector"
+        echo ""
+        echo -e "  ${CYAN}0)${NC} ← Back to Main Menu"
+        echo ""
+
+        echo -e "${YELLOW}Your choice:${NC} \c"
+        read -r adv_choice
+
+        case $adv_choice in
+            1)
+                # View Logs
+                echo -e "${GREEN}📝 View Application Logs${NC}"
+                ENV_NAME=$(select_environment "Select environment to view logs")
+
+                if [ -n "$ENV_NAME" ]; then
+                    view_environment_logs "$ENV_NAME"
+                fi
+                ;;
+            2)
+                # Navigate Projects
+                echo -e "${GREEN}📁 Navigate Projects in /root${NC}"
+                FOLDERS=$(find /root -maxdepth 1 -type d ! -name ".*" ! -path /root | sort)
+
+                if [ -z "$FOLDERS" ]; then
+                    echo -e "${RED}❌ No folders found${NC}"
+                else
+                    echo -e "${BLUE}Available folders:${NC}"
+                    echo ""
+                    i=1
+                    while IFS= read -r folder; do
+                        echo -e "  ${CYAN}$i)${NC} $folder"
+                        ((i++))
+                    done <<< "$FOLDERS"
+                    echo ""
+                    echo -e "${YELLOW}Choose a number (1-$((i-1))) :${NC} \c"
+                    read -r choice
+
+                    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
+                        SELECTED=$(echo "$FOLDERS" | sed -n "${choice}p")
+                        echo -e "${GREEN}📁 Selected folder: $SELECTED${NC}"
+                        echo -e "${CYAN}Command: cd $SELECTED${NC}"
+                        echo -e "${GREEN}Opening shell...${NC}"
+                        cd "$SELECTED" && exec $SHELL
+                    else
+                        echo -e "${RED}❌ Invalid choice${NC}"
+                    fi
+                fi
+                ;;
+            3)
+                # Open Code Directory
+                echo -e "${GREEN}📂 Open Code Directory${NC}"
+                ENV_NAME=$(select_environment "Select environment to open")
+
+                if [ -n "$ENV_NAME" ]; then
+                    PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
+
+                    if [ -z "$PROJECT_DIR" ]; then
+                        echo -e "${RED}❌ Directory not found: $ENV_NAME${NC}"
+                    else
+                        echo -e "${GREEN}📂 Project directory: $PROJECT_DIR${NC}"
+                        echo -e "${GREEN}Opening shell...${NC}"
+                        cd "$PROJECT_DIR" && exec $SHELL
+                    fi
+                fi
+                ;;
+            4)
+                # Toggle Web Inspector
+                echo -e "${GREEN}🔍 Toggle Web Inspector${NC}"
+                ENV_NAME=$(select_environment "Select environment for web inspector")
+
+                if [ -n "$ENV_NAME" ]; then
+                    PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
+
+                    if [ -z "$PROJECT_DIR" ]; then
+                        echo -e "${RED}❌ Project not found: $ENV_NAME${NC}"
+                    else
+                        toggle_web_inspector "$PROJECT_DIR"
+                        env_restart "$ENV_NAME"
+                    fi
+                fi
+                ;;
+            0)
+                # Return to main menu
+                return 0
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option${NC}"
+                ;;
+        esac
+
+        echo ""
+        echo -e "${YELLOW}Press Enter to continue...${NC}"
+        read -r
+    done
 }
 
 # Fonction principale
@@ -57,540 +199,292 @@ main() {
         print_header
         show_menu
 
-        echo -e "${YELLOW}Votre choix :${NC} \c"
+        echo -e "${YELLOW}Your choice:${NC} \c"
         read -r CHOICE
 
         case $CHOICE in
             1)
-                echo -e "${GREEN}📁 Navigation dans /root${NC}"
-                FOLDERS=$(find /root -maxdepth 1 -type d ! -name ".*" ! -path /root | sort)
-
-                if [ -z "$FOLDERS" ]; then
-                    echo -e "${RED}❌ Aucun dossier trouvé${NC}"
-                else
-                    echo -e "${BLUE}Dossiers disponibles :${NC}"
-                    echo ""
-                    i=1
-                    while IFS= read -r folder; do
-                        echo -e "  ${CYAN}$i)${NC} $folder"
-                        ((i++))
-                    done <<< "$FOLDERS"
-                    echo ""
-                    echo -e "${YELLOW}Choisissez un numéro (1-$((i-1))) :${NC} \c"
-                    read -r choice
-
-                    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                        SELECTED=$(echo "$FOLDERS" | sed -n "${choice}p")
-                        echo -e "${GREEN}📁 Dossier sélectionné : $SELECTED${NC}"
-                        echo -e "${CYAN}Commande : cd $SELECTED${NC}"
-                        echo -e "${GREEN}Ouverture du shell...${NC}"
-                        cd "$SELECTED" && exec $SHELL
-                    else
-                        echo -e "${RED}❌ Choix invalide${NC}"
-                    fi
-                fi
+                # Dashboard - View all environments
+                show_dashboard
                 ;;
-            2)
-                echo -e "${GREEN}📋 Environnements actifs et URLs${NC}"
-                echo "Chargement..."
-                sleep 0.5
 
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    echo -e "${RED}❌ Aucun environnement trouvé${NC}"
-                else
-                    echo ""
-                    while IFS= read -r name; do
-                        pm2_status=$(get_pm2_status "$name")
-                        PROJECT_DIR=$(resolve_project_path "$name")
-                        
-                        # Afficher le statut avec la bonne couleur
-                        case "$pm2_status" in
-                            "online")
-                                echo -e "${GREEN}🟢 [ONLINE] $name${NC}"
-                                ;;
-                            "stopped")
-                                echo -e "${YELLOW}🟡 [STOPPED] $name${NC}"
-                                ;;
-                            "errored"|"error")
-                                echo -e "${RED}🔴 [ERROR] $name${NC}"
-                                ;;
-                            "pm2-not-installed")
-                                echo -e "${RED}❌ [PM2 NOT INSTALLED] $name${NC}"
-                                ;;
-                            "not-found")
-                                echo -e "${CYAN}⚪ [NOT-FOUND] $name${NC}"
-                                ;;
-                            *)
-                                echo -e "${CYAN}⚪ [${pm2_status^^}] $name${NC}"
-                                ;;
-                        esac
-                        
-                        # Afficher le répertoire du projet
-                        if [ -n "$PROJECT_DIR" ]; then
-                            echo -e "${BLUE}   📂 $PROJECT_DIR${NC}"
-                            
-                            # Afficher si environnement Flox présent
-                            if [ -d "$PROJECT_DIR/.flox" ]; then
-                                echo -e "${GREEN}   ✅ Flox activé${NC}"
+            2)
+                # Start/Deploy - Smart start with multiple options
+                echo -e "${GREEN}🚀 Start/Deploy Environment${NC}"
+                echo ""
+                echo -e "${BLUE}Choose source:${NC}"
+                echo ""
+                echo -e "  ${CYAN}1)${NC} 🔍 Auto-detect project in /root"
+                echo -e "  ${CYAN}2)${NC} 📁 Custom local path"
+                echo -e "  ${CYAN}3)${NC} 🚀 Deploy from GitHub"
+                echo -e "  ${CYAN}0)${NC} Cancel"
+                echo ""
+                echo -e "${YELLOW}Your choice:${NC} \c"
+                read -r deploy_choice
+
+                case $deploy_choice in
+                    1)
+                        # Auto-detect projects
+                        echo -e "${BLUE}🔍 Scanning /root for projects...${NC}"
+                        PROJECTS=$(find /root -maxdepth 2 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | xargs -I{} dirname {} | sort -u)
+
+                        if [ -z "$PROJECTS" ]; then
+                            echo -e "${YELLOW}⚠️  No projects detected${NC}"
+                            echo -e "${BLUE}💡 Tip: Use option 2 for custom path or option 3 for GitHub${NC}"
+                        else
+                            echo -e "${BLUE}Detected projects:${NC}"
+                            echo ""
+                            i=1
+                            while IFS= read -r project; do
+                                echo -e "  ${CYAN}$i)${NC} $project"
+                                ((i++))
+                            done <<< "$PROJECTS"
+                            echo ""
+                            echo -e "${YELLOW}Choose project (1-$((i-1))):${NC} \c"
+                            read -r proj_choice
+
+                            if [[ "$proj_choice" =~ ^[0-9]+$ ]] && [ "$proj_choice" -ge 1 ] && [ "$proj_choice" -le $((i-1)) ]; then
+                                SELECTED_PROJECT=$(echo "$PROJECTS" | sed -n "${proj_choice}p")
+                                echo -e "${GREEN}✅ Starting: $SELECTED_PROJECT${NC}"
+                                env_start "$SELECTED_PROJECT"
+                            else
+                                echo -e "${RED}❌ Invalid choice${NC}"
                             fi
                         fi
-                        
-                        # Afficher le port et URL si disponible
-                        local port=$(get_port_from_pm2 "$name")
-                        if [ -n "$port" ]; then
-                            echo -e "${CYAN}   🔌 Port: $port${NC}"
-                            echo -e "${CYAN}   🌐 URL: http://localhost:$port${NC}"
-                        fi
-                        echo ""
-                    done <<< "$ALL_ENVS"
-                fi
-                ;;
-            3)
-                echo -e "${GREEN}🛑 Stopper un environnement${NC}"
-                ALL_ENVS=$(list_all_environments)
+                        ;;
+                    2)
+                        # Custom path
+                        echo -e "${BLUE}📁 Enter project path:${NC}"
+                        echo -e "${YELLOW}Path (absolute):${NC} \c"
+                        read -r CUSTOM_PATH
 
-                if [ -z "$ALL_ENVS" ]; then
-                    echo -e "${RED}❌ Aucun environnement trouvé${NC}"
-                else
-                    echo -e "${BLUE}Environnements à arrêter :${NC}"
-                    echo ""
-                    i=1
-                    while IFS= read -r env; do
-                        echo -e "  ${CYAN}$i)${NC} $env"
-                        ((i++))
-                    done <<< "$ALL_ENVS"
-                    echo ""
-                    echo -e "  ${CYAN}0)${NC} Annuler"
-                    echo ""
-                    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c"
-                    read -r choice
-
-                    if [[ "$choice" == "0" ]]; then
-                        echo -e "${BLUE}❌ Annulé${NC}"
-                    elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                        ENV_NAME=$(echo "$ALL_ENVS" | sed -n "${choice}p")
-
-                        echo -e "${YELLOW}🛑 Arrêt de $ENV_NAME...${NC}"
-                        env_stop "$ENV_NAME"
-                        echo -e "${GREEN}✅ Environnement $ENV_NAME arrêté !${NC}"
-                    else
-                        echo -e "${RED}❌ Choix invalide${NC}"
-                    fi
-                fi
-                ;;
-            4)
-                echo -e "${GREEN}📝 Ouvrir le répertoire de code${NC}"
-                ALL_ENVS=$(list_all_environments)
-
-                if [ -z "$ALL_ENVS" ]; then
-                    echo -e "${RED}❌ Aucun environnement trouvé${NC}"
-                else
-                    echo -e "${BLUE}Environnements disponibles :${NC}"
-                    echo ""
-                    i=1
-                    while IFS= read -r env; do
-                        echo -e "  ${CYAN}$i)${NC} $env"
-                        ((i++))
-                    done <<< "$ALL_ENVS"
-                    echo ""
-                    echo -e "${YELLOW}Choisissez un numéro (1-$((i-1))) :${NC} \c"
-                    read -r choice
-
-                    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                        ENV_NAME=$(echo "$ALL_ENVS" | sed -n "${choice}p")
-                        PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
-
-                        if [ -z "$PROJECT_DIR" ]; then
-                            echo -e "${RED}❌ Répertoire introuvable : $ENV_NAME${NC}"
+                        if [ -z "$CUSTOM_PATH" ]; then
+                            echo -e "${RED}❌ Path required${NC}"
+                        elif ! validate_project_path "$CUSTOM_PATH"; then
+                            echo -e "${RED}❌ Invalid or unsafe path${NC}"
                         else
-                            echo -e "${GREEN}📂 Répertoire du projet : $PROJECT_DIR${NC}"
-                            echo -e "${GREEN}Ouverture du shell...${NC}"
-                            cd "$PROJECT_DIR" && exec $SHELL
+                            env_start "$CUSTOM_PATH"
                         fi
+                        ;;
+                    3)
+                        # Deploy from GitHub
+                        echo -e "${GREEN}🚀 Deploy from GitHub${NC}"
+                        echo ""
+                        echo -e "${BLUE}🔍 Fetching your GitHub repos...${NC}"
+                        echo ""
+
+                        GITHUB_REPOS=$(list_github_repos)
+
+                        if [ -z "$GITHUB_REPOS" ]; then
+                            continue
+                        fi
+
+                        echo -e "${GREEN}Available repos:${NC}"
+                        echo ""
+                        i=1
+                        while IFS= read -r repo; do
+                            echo -e "  ${CYAN}$i)${NC} $repo"
+                            ((i++))
+                        done <<< "$GITHUB_REPOS"
+                        echo ""
+                        echo -e "${YELLOW}Choose repo (1-$((i-1))):${NC} \c"
+                        read -r repo_choice
+
+                        if [[ "$repo_choice" =~ ^[0-9]+$ ]] && [ "$repo_choice" -ge 1 ] && [ "$repo_choice" -le $((i-1)) ]; then
+                            SELECTED_REPO=$(echo "$GITHUB_REPOS" | sed -n "${repo_choice}p" | cut -d':' -f1)
+
+                            # Validate repo name
+                            if ! validate_repo_name "$SELECTED_REPO"; then
+                                echo -e "${RED}❌ Invalid repository name${NC}"
+                                continue
+                            fi
+
+                            echo ""
+                            echo -e "${GREEN}📦 Selected repo: $SELECTED_REPO${NC}"
+                            echo -e "${BLUE}🚀 Deploying...${NC}"
+                            echo ""
+
+                            # Deploy project
+                            deploy_github_project "$SELECTED_REPO"
+                        else
+                            echo -e "${RED}❌ Invalid choice${NC}"
+                        fi
+                        ;;
+                    0)
+                        echo -e "${BLUE}Cancelled${NC}"
+                        ;;
+                    *)
+                        echo -e "${RED}❌ Invalid option${NC}"
+                        ;;
+                esac
+                ;;
+
+            3)
+                # Restart Environment
+                echo -e "${GREEN}🔄 Restart Environment${NC}"
+                ENV_NAME=$(select_environment "Select environment to restart")
+
+                if [ -n "$ENV_NAME" ]; then
+                    env_restart "$ENV_NAME"
+                fi
+                ;;
+
+            4)
+                # Stop Environment
+                echo -e "${GREEN}🛑 Stop Environment${NC}"
+                ENV_NAME=$(select_environment "Select environment to stop")
+
+                if [ -n "$ENV_NAME" ]; then
+                    echo -e "${YELLOW}🛑 Stopping $ENV_NAME...${NC}"
+                    env_stop "$ENV_NAME"
+                    echo -e "${GREEN}✅ Environment $ENV_NAME stopped!${NC}"
+                fi
+                ;;
+
+            5)
+                # Remove Environment
+                echo -e "${GREEN}🗑️  Remove Environment${NC}"
+                echo ""
+                echo -e "${YELLOW}⚠️  WARNING: This will permanently delete the project!${NC}"
+                echo ""
+                ENV_NAME=$(select_environment "Select environment to remove")
+
+                if [ -n "$ENV_NAME" ]; then
+                    PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
+
+                    echo ""
+                    echo -e "${RED}⚠️  You are about to delete:${NC}"
+                    echo -e "${YELLOW}   Environment: $ENV_NAME${NC}"
+                    echo -e "${YELLOW}   Directory: $PROJECT_DIR${NC}"
+                    echo ""
+                    echo -e "${YELLOW}Type 'yes' to confirm:${NC} \c"
+                    read -r confirm
+
+                    if [ "$confirm" = "yes" ]; then
+                        env_remove "$ENV_NAME"
+                        echo -e "${GREEN}✅ Environment removed!${NC}"
                     else
-                        echo -e "${RED}❌ Choix invalide${NC}"
+                        echo -e "${BLUE}Cancelled - nothing was deleted${NC}"
                     fi
                 fi
                 ;;
-            5)
-                echo -e "${GREEN}🚀 Déployer un repo GitHub${NC}"
-                echo "Fonctionnalité disponible ! 🚀"
 
-                # Lister les repos GitHub
-                echo ""
-                echo -e "${BLUE}🔍 Recherche de vos repos GitHub...${NC}"
+            6)
+                # Publish to Web
+                echo -e "${GREEN}🌐 Publish to Web (HTTPS via Caddy + DuckDNS)${NC}"
                 echo ""
 
-                GITHUB_REPOS=$(list_github_repos)
-
-                if [ -z "$GITHUB_REPOS" ]; then
+                # Check if Caddy is installed
+                if ! command -v caddy >/dev/null 2>&1; then
+                    echo -e "${RED}❌ Caddy not installed${NC}"
+                    echo -e "${YELLOW}Install with: sudo apt install caddy${NC}"
                     continue
                 fi
 
-                echo -e "${GREEN}Repos disponibles :${NC}"
-                echo ""
-                i=1
-                while IFS= read -r repo; do
-                    echo -e "  ${CYAN}$i)${NC} $repo"
-                    ((i++))
-                done <<< "$GITHUB_REPOS"
-                echo ""
-                echo -e "${YELLOW}Choisissez un numéro (1-$((i-1))) :${NC} \c"
-                read -r choice
-
-                if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                    SELECTED_REPO=$(echo "$GITHUB_REPOS" | sed -n "${choice}p" | cut -d':' -f1)
-
-                    # Validate repo name
-                    if ! validate_repo_name "$SELECTED_REPO"; then
-                        echo -e "${RED}❌ Invalid repository name${NC}"
-                        continue
-                    fi
-
-                    echo ""
-                    echo -e "${GREEN}📦 Repo sélectionné : $SELECTED_REPO${NC}"
-                    echo -e "${BLUE}🚀 Déploiement en cours...${NC}"
-                    echo ""
-
-                    # Nom du projet = nom du repo (sans timestamp)
-                    PROJECT_NAME="${SELECTED_REPO,,}"
-                    PROJECT_DIR="$PROJECTS_DIR/$PROJECT_NAME"
-
-                    # Vérifier si le projet existe déjà
-                    EXISTING_PROJECT_PATH=$(resolve_project_path "$PROJECT_NAME")
-                    if [ -n "$EXISTING_PROJECT_PATH" ]; then
-                        echo -e "${YELLOW}⚠️  Le projet $PROJECT_NAME existe déjà à $EXISTING_PROJECT_PATH${NC}"
-                        echo -e "${YELLOW}Voulez-vous le remplacer ? (o/N) :${NC} \c"
-                        read -r confirm
-                        if [[ ! "$confirm" =~ ^[oO]$ ]]; then
-                            echo -e "${BLUE}❌ Annulé${NC}"
-                            continue
-                        fi
-                        # Supprimer l'ancien projet
-                        env_remove "$PROJECT_NAME"
-                    fi
-
-                    echo -e "${YELLOW}Création du projet $PROJECT_NAME...${NC}"
-                    mkdir -p "$PROJECT_DIR"
-
-                    # Cloner le repo
-                    GITHUB_USER=$(get_github_username)
-                    echo -e "${YELLOW}Clonage du repo https://github.com/$GITHUB_USER/$SELECTED_REPO...${NC}"
-                    if git clone "https://github.com/$GITHUB_USER/$SELECTED_REPO.git" "$PROJECT_DIR"; then
-                        echo -e "${GREEN}✅ Repo cloné avec succès${NC}"
-                    else
-                        echo -e "${RED}❌ Erreur lors du clonage${NC}"
-                        rm -rf "$PROJECT_DIR"
-                        continue
-                    fi
-
-                    # Initialiser l'environnement Flox
-                    echo ""
-                    echo -e "${YELLOW}🔧 Initialisation de l'environnement Flox...${NC}"
-                    if ! init_flox_env "$PROJECT_DIR" "$PROJECT_NAME"; then
-                        echo -e "${RED}❌ Échec de l'initialisation Flox${NC}"
-                        rm -rf "$PROJECT_DIR"
-                        continue
-                    fi
-
-                    # Démarrer l'environnement
-                    echo ""
-                    echo -e "${GREEN}🚀 Démarrage du projet...${NC}"
-                    env_start "$PROJECT_NAME"
-                    
-                    PORT=$(get_port_from_pm2 "$PROJECT_NAME")
-                    
-                    echo ""
-                    echo -e "${GREEN}✅ Déploiement réussi !${NC}"
-                    echo ""
-                    
-                    if [ -n "$PORT" ]; then
-                        echo -e "${BLUE}🌐 URLs disponibles :${NC}"
-                        echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                        echo ""
-                    fi
-                    
-                    echo -e "${YELLOW}📝 Code disponible dans : $PROJECT_DIR${NC}"
+                # Get public IP
+                PUBLIC_IP=$(get_public_ip)
+                if [ -n "$PUBLIC_IP" ]; then
+                    echo -e "${BLUE}📡 Detected Public IP: ${GREEN}$PUBLIC_IP${NC}"
                 else
-                    echo -e "${RED}❌ Choix invalide${NC}"
+                    echo -e "${YELLOW}⚠️  Could not detect public IP${NC}"
+                    echo -e "${YELLOW}IP:${NC} \c"
+                    read -r PUBLIC_IP
                 fi
-                ;;
-            6)
-                echo -e "${GREEN}🗑️  Supprimer un environnement${NC}"
-                ALL_ENVS=$(list_all_environments)
 
-                if [ -z "$ALL_ENVS" ]; then
-                    echo -e "${RED}❌ Aucun environnement trouvé${NC}"
+                echo ""
+                echo -e "${YELLOW}DuckDNS Subdomain (without .duckdns.org):${NC} \c"
+                read -r DUCKDNS_SUBDOMAIN
+
+                if [ -z "$DUCKDNS_SUBDOMAIN" ]; then
+                    echo -e "${RED}❌ Subdomain required${NC}"
+                    continue
+                fi
+
+                echo -e "${YELLOW}DuckDNS Token:${NC} \c"
+                read -rs DUCKDNS_TOKEN
+                echo ""
+
+                if [ -z "$DUCKDNS_TOKEN" ]; then
+                    echo -e "${RED}❌ Token required${NC}"
+                    continue
+                fi
+
+                # Update DuckDNS
+                echo ""
+                echo -e "${BLUE}🌐 Updating DuckDNS...${NC}"
+                DUCKDNS_RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP")
+
+                if [ "$DUCKDNS_RESPONSE" = "OK" ]; then
+                    echo -e "${GREEN}✅ DuckDNS updated successfully${NC}"
                 else
-                    echo -e "${BLUE}Environnements disponibles :${NC}"
-                    echo ""
-                    i=1
-                    while IFS= read -r env; do
-                        echo -e "  ${CYAN}$i)${NC} $env"
-                        ((i++))
-                    done <<< "$ALL_ENVS"
-                    echo ""
-                    echo -e "  ${CYAN}0)${NC} Annuler"
-                    echo ""
-                    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c"
-                    read -r choice
+                    echo -e "${RED}❌ DuckDNS update failed: $DUCKDNS_RESPONSE${NC}"
+                    continue
+                fi
 
-                    if [[ "$choice" == "0" ]]; then
-                        echo -e "${BLUE}❌ Annulé${NC}"
-                    elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                        ENV_NAME=$(echo "$ALL_ENVS" | sed -n "${choice}p")
+                # Select environment
+                echo ""
+                ENV_NAME=$(select_environment "Select environment to publish")
 
-                        echo ""
-                        echo -e "${RED}⚠️  ATTENTION : Cette action est irréversible !${NC}"
-                        echo -e "${YELLOW}Projet : $ENV_NAME${NC}"
-                        PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
-                        echo -e "${YELLOW}Dossier : $PROJECT_DIR${NC}"
-                        echo ""
+                if [ -z "$ENV_NAME" ]; then
+                    continue
+                fi
 
-                        env_remove "$ENV_NAME"
-                        echo ""
-                        echo -e "${GREEN}✅ Projet $ENV_NAME supprimé avec succès !${NC}"
-                    else
-                        echo -e "${RED}❌ Choix invalide${NC}"
-                    fi
+                PORT=$(get_port_from_pm2 "$ENV_NAME")
+                if [ -z "$PORT" ]; then
+                    echo -e "${RED}❌ Could not get port for $ENV_NAME${NC}"
+                    continue
+                fi
+
+                # Generate Caddyfile
+                DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+                CADDYFILE="/etc/caddy/Caddyfile"
+
+                echo -e "${BLUE}🔧 Generating Caddyfile...${NC}"
+
+                sudo tee "$CADDYFILE" > /dev/null << EOF
+$DOMAIN {
+    reverse_proxy /$ENV_NAME* localhost:$PORT
+    encode gzip
+}
+EOF
+
+                echo -e "${GREEN}✅ Caddyfile generated${NC}"
+
+                # Reload Caddy
+                echo -e "${BLUE}🔄 Reloading Caddy...${NC}"
+                if sudo systemctl reload caddy; then
+                    echo -e "${GREEN}✅ Caddy reloaded${NC}"
+                    echo ""
+                    echo -e "${GREEN}🎉 SUCCESS! Your app is now available at:${NC}"
+                    echo -e "${CYAN}   https://$DOMAIN/$ENV_NAME${NC}"
+                    echo ""
+                else
+                    echo -e "${RED}❌ Failed to reload Caddy${NC}"
+                    echo -e "${YELLOW}Check logs with: sudo journalctl -u caddy -n 50${NC}"
                 fi
                 ;;
 
             7)
-                echo -e "${GREEN}▶️  Démarrer un environnement (détecté)${NC}"
-                ALL_ENVS=$(list_all_environments)
-
-                if [ -z "$ALL_ENVS" ]; then
-                    echo -e "${RED}❌ Aucun environnement trouvé${NC}"
-                else
-                    echo -e "${BLUE}Environnements disponibles :${NC}"
-                    echo ""
-                    i=1
-                    while IFS= read -r env; do
-                        echo -e "  ${CYAN}$i)${NC} $env"
-                        ((i++))
-                    done <<< "$ALL_ENVS"
-                    echo ""
-                    echo -e "  ${CYAN}0)${NC} Annuler"
-                    echo ""
-                    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c"
-                    read -r choice
-
-                    if [[ "$choice" == "0" ]]; then
-                        echo -e "${BLUE}❌ Annulé${NC}"
-                    elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
-                        ENV_NAME=$(echo "$ALL_ENVS" | sed -n "${choice}p")
-                        
-                        echo -e "${GREEN}▶️  Démarrage du projet $ENV_NAME...${NC}"
-
-                        env_start "$ENV_NAME"
-                        
-                        echo ""
-                        echo -e "${GREEN}✅ Projet démarré avec succès !${NC}"
-                        echo ""
-                        
-                        PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
-                        if [ -n "$PROJECT_DIR" ]; then
-                            PORT=$(get_port_from_pm2 "$(basename "$PROJECT_DIR")")
-                            if [ -n "$PORT" ]; then
-                                echo -e "${BLUE}🌐 URLs disponibles :${NC}"
-                                echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                            else
-                                echo -e "${YELLOW}  ⚠️  Port non assigné ou non détecté${NC}"
-                            fi
-                            echo ""
-                            echo -e "${YELLOW}📝 Code disponible dans : $PROJECT_DIR${NC}"
-                        else
-                            echo -e "${RED}❌ Impossible de résoudre le répertoire du projet pour $ENV_NAME${NC}"
-                        fi
-
-                    else
-                        echo -e "${RED}❌ Choix invalide${NC}"
-                    fi
-                fi
+                # Advanced Options Submenu
+                show_advanced_menu
                 ;;
 
-            8)
-                echo -e "${GREEN}▶️  Démarrer un environnement (chemin personnalisé)${NC}"
-                echo ""
-                echo -e "${YELLOW}Entrez le chemin absolu du projet (ex: /root/my-robots/chatbot) :${NC} \c"
-                read -r CUSTOM_PATH
-
-                if [ -z "$CUSTOM_PATH" ]; then
-                    echo -e "${RED}❌ Chemin requis${NC}"
-                elif ! validate_project_path "$CUSTOM_PATH"; then
-                    # Error already displayed by validate_project_path
-                    :
-                else
-                    echo -e "${GREEN}▶️  Démarrage du projet à partir de $CUSTOM_PATH...${NC}"
-                    env_start "$CUSTOM_PATH"
-                    echo ""
-                    echo -e "${GREEN}✅ Projet démarré avec succès ou mis à jour !${NC}"
-                    
-                    PROJECT_DIR=$(resolve_project_path "$CUSTOM_PATH")
-                    if [ -n "$PROJECT_DIR" ]; then
-                        ENV_NAME=$(basename "$PROJECT_DIR") # This assumes project name is the last part of the path
-                        PORT=$(get_port_from_pm2 "$ENV_NAME")
-                        if [ -n "$PORT" ]; then
-                            echo -e "${BLUE}🌐 URLs disponibles :${NC}"
-                            echo -e "  • ${CYAN}http://localhost:${PORT}${NC}"
-                        else
-                            echo -e "${YELLOW}  ⚠️  Port non assigné ou non détecté${NC}"
-                        fi
-                        echo ""
-                        echo -e "${YELLOW}📝 Code disponible dans : $PROJECT_DIR${NC}"
-                    else
-                        echo -e "${RED}❌ Impossible de résoudre le répertoire du projet pour $CUSTOM_PATH${NC}"
-                    fi
-                fi
-                ;;
-
-            9)
-                echo -e "${GREEN}🌐 Publier sur le web${NC}"
-                echo ""
-                
-                # Vérifier Caddy
-                if ! command -v caddy &> /dev/null; then
-                    echo -e "${RED}❌ Caddy n'est pas installé${NC}"
-                    echo -e "${YELLOW}Lancez: sudo ./install.sh${NC}"
-                    continue
-                fi
-                
-                # Vérifier PM2
-                if ! command -v pm2 &> /dev/null; then
-                    echo -e "${RED}❌ PM2 n'est pas installé${NC}"
-                    continue
-                fi
-                
-                # Récupérer l'IP publique
-                echo -e "${BLUE}🔍 Détection de l'IP publique...${NC}"
-                PUBLIC_IP=$(curl -4 -s https://ip.me 2>/dev/null)
-                if [ -z "$PUBLIC_IP" ]; then
-                    echo -e "${RED}❌ Impossible de récupérer l'IP publique${NC}"
-                    continue
-                fi
-                
-                echo -e "${GREEN}✅ IP publique détectée: $PUBLIC_IP${NC}"
-                echo ""
-                
-                # Demander le sous-domaine DuckDNS
-                echo -e "${CYAN}🦆 Configuration DuckDNS${NC}"
-                echo ""
-                echo -e "${BLUE}Votre URL sera: votresubdomain.duckdns.org${NC}"
-                echo -e "${YELLOW}Créez un compte gratuit sur https://www.duckdns.org${NC}"
-                echo ""
-                
-                echo -e "${YELLOW}Sous-domaine DuckDNS (ex: demo, dev) :${NC} \c"
-                read -r SUBDOMAIN
-                if [ -z "$SUBDOMAIN" ]; then
-                    echo -e "${RED}❌ Sous-domaine requis${NC}"
-                    continue
-                fi
-                
-                echo ""
-                echo -e "${YELLOW}Token DuckDNS :${NC} \c"
-                read -rs TOKEN
-                echo ""
-                if [ -z "$TOKEN" ]; then
-                    echo -e "${RED}❌ Token requis${NC}"
-                    continue
-                fi
-                
-                echo ""
-                echo -e "${BLUE}📡 Mise à jour DuckDNS...${NC}"
-                DUCKDNS_RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=$SUBDOMAIN&token=$TOKEN&ip=$PUBLIC_IP")
-                
-                if [ "$DUCKDNS_RESPONSE" != "OK" ]; then
-                    echo -e "${RED}❌ Erreur DuckDNS: $DUCKDNS_RESPONSE${NC}"
-                    echo -e "${YELLOW}Vérifiez votre sous-domaine et token${NC}"
-                    continue
-                fi
-                
-                echo -e "${GREEN}✅ DuckDNS configuré: $SUBDOMAIN.duckdns.org → $PUBLIC_IP${NC}"
-                echo ""
-                
-                # Récupérer les ports PM2
-                echo -e "${BLUE}📡 Détection des applications PM2...${NC}"
-                APPS=$(pm2 jlist 2>/dev/null | python3 -c "
-import sys, json
-try:
-    apps = json.load(sys.stdin)
-    for app in apps:
-        if app['pm2_env']['status'] == 'online':
-            env = app['pm2_env'].get('env', {})
-            port = env.get('PORT') or env.get('port')
-            if port:
-                name = app['name']
-                print(f'{name}:{port}')
-except:
-    pass
-" 2>/dev/null)
-                
-                if [ -z "$APPS" ]; then
-                    echo -e "${RED}❌ Aucune application PM2 trouvée${NC}"
-                    continue
-                fi
-                
-                # Générer le Caddyfile
-                CADDYFILE="/etc/caddy/Caddyfile"
-                echo -e "${BLUE}📝 Génération de la configuration Caddy...${NC}"
-                
-                # Backup de l'ancien fichier
-                if [ -f "$CADDYFILE" ]; then
-                    sudo cp "$CADDYFILE" "${CADDYFILE}.backup.$(date +%s)"
-                fi
-                
-                # Créer le nouveau Caddyfile
-                {
-                    echo "# Auto-généré par BuildFlowz - $(date)"
-                    echo ""
-                    
-                    echo "$APPS" | while IFS=: read -r name port; do
-                        echo "${SUBDOMAIN}.duckdns.org/${name} {"
-                        echo "    reverse_proxy localhost:${port}"
-                        echo "}"
-                        echo ""
-                    done
-                } | sudo tee "$CADDYFILE" > /dev/null
-                
-                # Recharger Caddy
-                echo -e "${BLUE}🔄 Rechargement de Caddy...${NC}"
-                if sudo systemctl reload caddy 2>/dev/null || sudo caddy reload --config "$CADDYFILE" 2>/dev/null; then
-                    echo -e "${GREEN}✅ Caddy configuré et rechargé${NC}"
-                else
-                    echo -e "${YELLOW}⚠️  Erreur lors du rechargement de Caddy${NC}"
-                    echo -e "${YELLOW}Configuration sauvegardée dans $CADDYFILE${NC}"
-                fi
-                
-                echo ""
-                echo -e "${GREEN}🌐 URLs disponibles:${NC}"
-                echo ""
-                
-                echo "$APPS" | while IFS=: read -r name port; do
-                    echo -e "  ${CYAN}✓ https://${SUBDOMAIN}.duckdns.org/${name}${NC}"
-                done
-                
-                echo ""
-                echo -e "${YELLOW}⚠️  Note: Le certificat HTTPS peut prendre quelques minutes${NC}"
-                ;;
-
-            10)
+            0|10)
+                # Exit
                 echo -e "${GREEN}👋 Au revoir !${NC}"
                 exit 0
                 ;;
+
             *)
-                echo -e "${RED}❌ Option invalide${NC}"
+                echo -e "${RED}❌ Invalid option${NC}"
                 ;;
         esac
 
         echo ""
-        echo -e "${YELLOW}Appuyez sur Entrée pour continuer...${NC}"
+        echo -e "${YELLOW}Press Enter to continue...${NC}"
         read -r
     done
 }
-
 
 # Lancer le menu
 main
