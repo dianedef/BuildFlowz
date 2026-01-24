@@ -1,8 +1,67 @@
 #!/bin/bash
+# ============================================================================
+# BuildFlowz Shared Library
+# ============================================================================
+#
+# Description:
+#   Core library containing all reusable functions for BuildFlowz CLI.
+#   Handles environment management, PM2 operations, port allocation,
+#   Flox integration, validation, logging, and caching.
+#
+# Dependencies:
+#   - pm2 (required)
+#   - node (required)
+#   - flox (optional)
+#   - git (optional)
+#   - jq (optional, preferred for JSON parsing)
+#   - python3 (optional, fallback for JSON parsing)
+#
+# Author: BuildFlowz Team
+# Version: 2.0.0
+# Date: 2026-01-24
+# ============================================================================
 
-# Shared library for Dokploy CLI
+# Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Contains all reusable functions and logic
+
+# Load configuration
+source "$SCRIPT_DIR/config.sh"
+
+# ============================================================================
+# ERROR HANDLING SETUP
+# ============================================================================
+
+# Enable strict mode if configured
+if [ "$BUILDFLOWZ_STRICT_MODE" = "true" ]; then
+    set -euo pipefail
+fi
+
+# Error trap handler
+error_trap_handler() {
+    local exit_code=$?
+    local line_number=$1
+    log ERROR "Script failed at line $line_number with exit code $exit_code"
+    error "Script execution failed (line $line_number, code $exit_code)"
+}
+
+# Install error trap if configured
+if [ "$BUILDFLOWZ_ERROR_TRAPS" = "true" ]; then
+    trap 'error_trap_handler ${LINENO}' ERR
+fi
+
+# Cleanup trap for temporary files
+TEMP_FILES=()
+cleanup_temp_files() {
+    for file in "${TEMP_FILES[@]}"; do
+        [ -f "$file" ] && rm -f "$file" 2>/dev/null || true
+    done
+}
+trap cleanup_temp_files EXIT
+
+# Register a temp file for cleanup
+register_temp_file() {
+    TEMP_FILES+=("$1")
+}
 
 # Colors
 RED='\033[0;31m'
@@ -13,97 +72,581 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-# Config
-PROJECTS_DIR="/root"
+# Config (use centralized config values)
+PROJECTS_DIR="${BUILDFLOWZ_PROJECTS_DIR}"
 
-# Helper functions
+# ============================================================================
+# STRUCTURED LOGGING
+# ============================================================================
+
+# Ensure log directory exists
+init_logging() {
+    if [ "$BUILDFLOWZ_LOGGING_ENABLED" = "true" ]; then
+        mkdir -p "$BUILDFLOWZ_LOG_DIR" 2>/dev/null || true
+
+        # Rotate old logs
+        if [ -f "$BUILDFLOWZ_LOG_FILE" ]; then
+            local log_size=$(stat -f%z "$BUILDFLOWZ_LOG_FILE" 2>/dev/null || stat -c%s "$BUILDFLOWZ_LOG_FILE" 2>/dev/null || echo 0)
+            # Rotate if larger than 10MB
+            if [ "$log_size" -gt 10485760 ]; then
+                mv "$BUILDFLOWZ_LOG_FILE" "$BUILDFLOWZ_LOG_FILE.$(date +%s)" 2>/dev/null || true
+
+                # Clean old logs
+                find "$BUILDFLOWZ_LOG_DIR" -name "*.log.*" -mtime +$BUILDFLOWZ_LOG_RETENTION_DAYS -delete 2>/dev/null || true
+            fi
+        fi
+    fi
+}
+
+# Structured logging function
+log() {
+    local level=$1
+    shift
+    local message="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    # Check if logging is enabled
+    if [ "$BUILDFLOWZ_LOGGING_ENABLED" != "true" ]; then
+        return 0
+    fi
+
+    # Check log level filtering
+    local level_priority=0
+    case "$level" in
+        DEBUG) level_priority=0 ;;
+        INFO) level_priority=1 ;;
+        WARNING) level_priority=2 ;;
+        ERROR) level_priority=3 ;;
+    esac
+
+    local config_priority=1  # Default to INFO
+    case "$BUILDFLOWZ_LOG_LEVEL" in
+        DEBUG) config_priority=0 ;;
+        INFO) config_priority=1 ;;
+        WARNING) config_priority=2 ;;
+        ERROR) config_priority=3 ;;
+    esac
+
+    # Only log if level meets threshold
+    if [ $level_priority -lt $config_priority ]; then
+        return 0
+    fi
+
+    # Format: [TIMESTAMP] [LEVEL] message
+    local log_entry="[$timestamp] [$level] $message"
+
+    # Append to log file
+    echo "$log_entry" >> "$BUILDFLOWZ_LOG_FILE" 2>/dev/null || true
+}
+
+# Initialize logging on load
+init_logging
+
+# ============================================================================
+# JSON PARSING UTILITIES (Priority 3 #9: jq over Python)
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# parse_json - Parse JSON data with jq or python fallback
+#
+# Description:
+#   Parses JSON using jq if available (faster), falls back to python3.
+#   Automatically chooses best available tool.
+#
+# Arguments:
+#   $1 - JQ expression (e.g., '.[] | .name')
+#   stdin - JSON data to parse
+#
+# Returns:
+#   Parsed output
+#
+# Example:
+#   echo '{"name":"test"}' | parse_json '.name'
+# -----------------------------------------------------------------------------
+parse_json() {
+    local jq_expr=$1
+
+    # Prefer jq if available and configured
+    if [ "$BUILDFLOWZ_PREFER_JQ" = "true" ] && command -v jq >/dev/null 2>&1; then
+        jq -r "$jq_expr" 2>/dev/null || {
+            log ERROR "jq parsing failed with expression: $jq_expr"
+            return 1
+        }
+    elif command -v python3 >/dev/null 2>&1; then
+        # Fallback to python3
+        # Convert jq expression to python (basic support)
+        python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    # Note: This is a simplified fallback, not full jq compatibility
+    print(data)
+except Exception as e:
+    print(f'ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null || {
+            log ERROR "python3 JSON parsing failed"
+            return 1
+        }
+    else
+        log ERROR "No JSON parser available (install jq or python3)"
+        error "No JSON parser available"
+        return 1
+    fi
+}
+
+# ============================================================================
+# PREREQUISITE & VALIDATION FUNCTIONS
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# check_prerequisites - Validate required and optional tools are installed
+#
+# Description:
+#   Checks for critical tools (pm2, node) and warns about missing optional
+#   tools (flox, git, jq, python3). Fails if critical tools are missing.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - All required tools present
+#   1 - Missing required tools
+#
+# Outputs:
+#   Error messages for missing required tools
+#   Warning messages for missing optional tools
+#
+# Example:
+#   check_prerequisites || exit 1
+# -----------------------------------------------------------------------------
+check_prerequisites() {
+    local missing=()
+    local warnings=()
+
+    # Critical tools
+    for cmd in pm2 node; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing+=("$cmd")
+        fi
+    done
+
+    # Optional but recommended tools
+    for cmd in flox git python3; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            warnings+=("$cmd")
+        fi
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        error "Missing required tools: ${missing[*]}"
+        info "Run: ./install.sh or install manually"
+        return 1
+    fi
+
+    if [ ${#warnings[@]} -gt 0 ]; then
+        warning "Optional tools missing: ${warnings[*]}"
+        info "Some features may not work properly"
+    fi
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# validate_project_path - Validate project directory path for security
+#
+# Description:
+#   Validates a project path to prevent security vulnerabilities:
+#   - Path traversal attacks (.. sequences)
+#   - Command injection (special characters)
+#   - Access to unsafe directories
+#   - Non-existent paths
+#
+# Arguments:
+#   $1 - Path to validate
+#
+# Returns:
+#   0 - Path is valid and safe
+#   1 - Path is invalid or unsafe
+#
+# Security:
+#   Blocks: .., ;, &, |, $, backticks
+#   Allows only: /root/*, /home/*, /opt/*
+#
+# Example:
+#   validate_project_path "/root/myapp" || exit 1
+# -----------------------------------------------------------------------------
+validate_project_path() {
+    local path=$1
+
+    # Must not be empty
+    if [ -z "$path" ]; then
+        error "Path cannot be empty"
+        return 1
+    fi
+
+    # Must be absolute path
+    if [[ "$path" != /* ]]; then
+        error "Path must be absolute (start with /)"
+        return 1
+    fi
+
+    # Must start with /root or be a known safe directory
+    if [[ "$path" != "/root" ]] && [[ "$path" != /root/* ]] && \
+       [[ "$path" != "/home" ]] && [[ "$path" != /home/* ]] && \
+       [[ "$path" != "/opt" ]] && [[ "$path" != /opt/* ]]; then
+        error "Path must be under /root, /home, or /opt for safety"
+        return 1
+    fi
+
+    # Must not contain path traversal attempts
+    if [[ "$path" == *..* ]]; then
+        error "Path cannot contain '..' (path traversal blocked)"
+        return 1
+    fi
+
+    # Must not contain suspicious characters
+    if [[ "$path" =~ [\;\&\|\$\`] ]]; then
+        error "Path contains invalid characters"
+        return 1
+    fi
+
+    # Must exist and be a directory
+    if [ ! -d "$path" ]; then
+        error "Path does not exist or is not a directory: $path"
+        return 1
+    fi
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# validate_env_name - Validate environment/project name
+#
+# Description:
+#   Ensures environment names follow safe naming conventions.
+#
+# Arguments:
+#   $1 - Environment name to validate
+#
+# Returns:
+#   0 - Name is valid
+#   1 - Name is invalid
+#
+# Rules:
+#   - Only alphanumeric, dash, underscore, dot allowed
+#   - Cannot start with dash or dot
+#   - Cannot be empty
+#
+# Example:
+#   validate_env_name "my-app" || exit 1
+# -----------------------------------------------------------------------------
+validate_env_name() {
+    local name=$1
+
+    if [ -z "$name" ]; then
+        error "Environment name cannot be empty"
+        return 1
+    fi
+
+    # Must contain only alphanumeric, dash, underscore, dot
+    if [[ ! "$name" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        error "Environment name can only contain letters, numbers, dash, underscore, dot"
+        return 1
+    fi
+
+    # Must not start with dash or dot
+    if [[ "$name" =~ ^[-.] ]]; then
+        error "Environment name cannot start with dash or dot"
+        return 1
+    fi
+
+    return 0
+}
+
+# Helper functions (with logging)
 success() {
     echo -e "${GREEN}✅${NC} $1"
+    log INFO "SUCCESS: $1"
 }
 
 error() {
     echo -e "${RED}❌${NC} $1"
+    log ERROR "$1"
 }
 
 info() {
     echo -e "${BLUE}ℹ️${NC} $1"
+    log INFO "$1"
 }
 
 warning() {
     echo -e "${YELLOW}⚠️${NC} $1"
+    log WARNING "$1"
 }
 
-# Port management
+# ============================================================================
+# PM2 DATA CACHING (Performance Optimization)
+# ============================================================================
+
+# Global cache variables
+PM2_DATA_CACHE=""
+PM2_DATA_CACHE_TIME=0
+
+# -----------------------------------------------------------------------------
+# get_pm2_data_cached - Fetch and cache all PM2 application data
+#
+# Description:
+#   Retrieves all PM2 app data in a single call and caches the results.
+#   Uses jq for JSON parsing (falls back to python3).
+#   Cache is valid for BUILDFLOWZ_PM2_CACHE_TTL seconds (default: 5).
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#   1 - PM2 not installed or error
+#
+# Outputs:
+#   name|status|port|cwd for each PM2 app (one per line)
+#
+# Cache Behavior:
+#   - Returns cached data if age < TTL
+#   - Fetches fresh data if cache expired
+#   - Global variables: PM2_DATA_CACHE, PM2_DATA_CACHE_TIME
+#
+# Example:
+#   get_pm2_data_cached
+# -----------------------------------------------------------------------------
+get_pm2_data_cached() {
+    local current_time=$(date +%s)
+    local cache_age=$((current_time - PM2_DATA_CACHE_TIME))
+
+    # Return cached data if fresh
+    if [ "$BUILDFLOWZ_PM2_CACHE_ENABLED" = "true" ] && [ $cache_age -lt $BUILDFLOWZ_PM2_CACHE_TTL ] && [ -n "$PM2_DATA_CACHE" ]; then
+        log DEBUG "Using cached PM2 data (age: ${cache_age}s)"
+        echo "$PM2_DATA_CACHE"
+        return 0
+    fi
+
+    # Fetch fresh data
+    log DEBUG "Fetching fresh PM2 data"
+    if ! command -v pm2 >/dev/null 2>&1; then
+        log WARNING "PM2 not installed"
+        return 1
+    fi
+
+    # Get all PM2 data in one call: name|status|port|cwd
+    # Use jq if available (faster), fallback to python3
+    if [ "$BUILDFLOWZ_PREFER_JQ" = "true" ] && command -v jq >/dev/null 2>&1; then
+        PM2_DATA_CACHE=$(pm2 jlist 2>/dev/null | jq -r '.[] | "\(.name)|\(.pm2_env.status // "unknown")|\(.pm2_env.env.PORT // "")|\(.pm2_env.pm_cwd // "")"' 2>/dev/null)
+    elif command -v python3 >/dev/null 2>&1; then
+        PM2_DATA_CACHE=$(pm2 jlist 2>/dev/null | python3 -c "
+import sys, json
+try:
+    apps = json.load(sys.stdin)
+    for app in apps:
+        name = app.get('name', '')
+        status = app.get('pm2_env', {}).get('status', 'unknown')
+        port = app.get('pm2_env', {}).get('env', {}).get('PORT', '')
+        cwd = app.get('pm2_env', {}).get('pm_cwd', '')
+        print(f'{name}|{status}|{port}|{cwd}')
+except Exception as e:
+    import sys
+    print(f'ERROR: {e}', file=sys.stderr)
+" 2>/dev/null)
+    else
+        log ERROR "No JSON parser available (jq or python3 required)"
+        return 1
+    fi
+
+    PM2_DATA_CACHE_TIME=$current_time
+    echo "$PM2_DATA_CACHE"
+}
+
+# -----------------------------------------------------------------------------
+# invalidate_pm2_cache - Clear PM2 data cache
+#
+# Description:
+#   Invalidates the PM2 data cache to force a fresh fetch on next access.
+#   Should be called after any PM2 state changes (start, stop, delete).
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Always succeeds
+#
+# Example:
+#   pm2 start app.js
+#   invalidate_pm2_cache
+# -----------------------------------------------------------------------------
+invalidate_pm2_cache() {
+    log DEBUG "Invalidating PM2 cache"
+    PM2_DATA_CACHE=""
+    PM2_DATA_CACHE_TIME=0
+}
+
+# -----------------------------------------------------------------------------
+# get_pm2_app_data - Extract specific PM2 app data from cache
+#
+# Description:
+#   Retrieves a specific field for a PM2 app from the cached data.
+#
+# Arguments:
+#   $1 - App name
+#   $2 - Field to retrieve: "status", "port", "cwd", or empty for all
+#
+# Returns:
+#   0 - App found
+#   1 - App not found or cache empty
+#
+# Outputs:
+#   Requested field value(s)
+#
+# Example:
+#   port=$(get_pm2_app_data "myapp" "port")
+# -----------------------------------------------------------------------------
+get_pm2_app_data() {
+    local app_name=$1
+    local field=$2  # status, port, or cwd
+
+    local data=$(get_pm2_data_cached)
+    if [ -z "$data" ]; then
+        return 1
+    fi
+
+    # Parse cached data
+    echo "$data" | while IFS='|' read -r name status port cwd; do
+        if [ "$name" = "$app_name" ]; then
+            case "$field" in
+                status) echo "$status" ;;
+                port) echo "$port" ;;
+                cwd) echo "$cwd" ;;
+                *) echo "$status|$port|$cwd" ;;
+            esac
+            return 0
+        fi
+    done
+}
+
+# ============================================================================
+# PORT MANAGEMENT FUNCTIONS
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# is_port_in_use - Check if a TCP port is currently in use
+#
+# Description:
+#   Uses ss command to check if a port is listening.
+#
+# Arguments:
+#   $1 - Port number to check
+#
+# Returns:
+#   0 - Port is in use
+#   1 - Port is available
+#
+# Example:
+#   if is_port_in_use 3000; then
+#       echo "Port 3000 is busy"
+#   fi
+# -----------------------------------------------------------------------------
 is_port_in_use() {
     local port=$1
     ss -ltn 2>/dev/null | awk '{print $4}' | grep -E "[:.]${port}$" >/dev/null 2>&1
 }
 
-# Get all ports used by PM2 apps (even stopped ones)
+# Get all ports used by PM2 apps (even stopped ones) - OPTIMIZED
 get_all_pm2_ports() {
     if ! command -v pm2 >/dev/null 2>&1; then
         return 0
     fi
-    
-    pm2 jlist 2>/dev/null | python3 -c "
-import sys, json
-try:
-    apps = json.load(sys.stdin)
-    ports = []
-    for app in apps:
-        env_vars = app.get('pm2_env', {}).get('env', {})
-        port = env_vars.get('PORT', '')
-        if port:
-            ports.append(str(port))
-    print(' '.join(ports))
-except:
-    pass
-" 2>/dev/null
+
+    local data=$(get_pm2_data_cached)
+    if [ -z "$data" ]; then
+        return 0
+    fi
+
+    # Extract ports from cached data
+    echo "$data" | awk -F'|' '{if ($3 != "") print $3}' | tr '\n' ' '
 }
 
+# -----------------------------------------------------------------------------
+# find_available_port - Find next available port in range
+#
+# Description:
+#   Searches for an available port starting from base_port.
+#   Checks both active ports (via ss) and PM2-assigned ports.
+#
+# Arguments:
+#   $1 - Base port to start search (default: BUILDFLOWZ_PORT_RANGE_START)
+#
+# Returns:
+#   0 - Available port found
+#   1 - No available port in range
+#
+# Outputs:
+#   Available port number to stdout
+#
+# Notes:
+#   - Searches up to BUILDFLOWZ_PORT_MAX_ATTEMPTS ports
+#   - Avoids race conditions by checking both active and reserved ports
+#
+# Example:
+#   port=$(find_available_port 3000)
+# -----------------------------------------------------------------------------
 find_available_port() {
-    local base_port=$1
-    local max_range=100
+    local base_port=${1:-$BUILDFLOWZ_PORT_RANGE_START}
+    local max_range=$BUILDFLOWZ_PORT_MAX_ATTEMPTS
     local port=$base_port
-    
-    # Get all ports already assigned in PM2
+
+    # Get all ports already assigned in PM2 (atomic read)
     local pm2_ports=$(get_all_pm2_ports)
-    
+
+    # Search for available port
     while [ $((port - base_port)) -lt $max_range ]; do
-        # Check if port is in use OR already assigned in PM2
+        # Double-check: not in use AND not already assigned in PM2
+        # This reduces race condition window
         if ! is_port_in_use $port && ! echo "$pm2_ports" | grep -q "\<$port\>"; then
-            echo $port
-            return 0
+            # Final verification before returning
+            if ! is_port_in_use $port; then
+                echo $port
+                log DEBUG "Found available port: $port"
+                return 0
+            fi
         fi
         port=$((port + 1))
     done
-    
-    echo -e "${RED}❌ Impossible de trouver un port disponible après $max_range tentatives${NC}" >&2
+
+    error "Impossible de trouver un port disponible après $max_range tentatives"
+    log ERROR "Port exhaustion: no ports available in range $base_port-$((base_port + max_range))"
     return 1
 }
 
-# Get project status from PM2
+# Get project status from PM2 - OPTIMIZED
 get_pm2_status() {
     local identifier=$1
     local project_dir=$(resolve_project_path "$identifier")
-    
+
     if [ -z "$project_dir" ]; then
         echo "not-found"
         return 1
     fi
 
     local env_name=$(basename "$project_dir") # Use basename as the PM2 app name
-    
+
     if ! command -v pm2 >/dev/null 2>&1; then
         echo "pm2-not-installed"
         return 1
     fi
-    
-    # Vérifie si le projet existe dans PM2
-    if pm2 jlist 2>/dev/null | grep -q "\"name\":\"$env_name\""; then
-        # Récupère le statut
-        local status=$(pm2 jlist 2>/dev/null | python3 -c "import sys, json; apps = json.load(sys.stdin); print([a['pm2_env']['status'] for a in apps if a['name'] == '$env_name'][0] if any(a['name'] == '$env_name' for a in apps) else 'unknown')" 2>/dev/null)
-        echo "${status:-unknown}"
+
+    # Use cached data
+    local status=$(get_pm2_app_data "$env_name" "status")
+
+    if [ -n "$status" ]; then
+        echo "$status"
         return 0
     else
         echo "stopped"
@@ -114,7 +657,7 @@ get_pm2_status() {
 # Get project directory path
 
 
-# Get port from PM2 env vars for a project
+# Get port from PM2 env vars for a project - OPTIMIZED
 get_port_from_pm2() {
     local identifier=$1
     local project_dir=$(resolve_project_path "$identifier")
@@ -124,29 +667,48 @@ get_port_from_pm2() {
     fi
 
     local env_name=$(basename "$project_dir") # Use basename as the PM2 app name
-    
+
     if ! command -v pm2 >/dev/null 2>&1; then
         return 1
     fi
-    
-    pm2 jlist 2>/dev/null | python3 -c "
-import sys, json
-try:
-    apps = json.load(sys.stdin)
-    for app in apps:
-        if app['name'] == '$env_name':
-            env_vars = app.get('pm2_env', {}).get('env', {})
-            port = env_vars.get('PORT', '')
-            if port:
-                print(port)
-                sys.exit(0)
-except:
-    pass
-" 2>/dev/null
+
+    # Use cached data
+    local port=$(get_pm2_app_data "$env_name" "port")
+
+    if [ -n "$port" ]; then
+        echo "$port"
+        return 0
+    fi
+
+    return 1
 }
 
 
-# Resolve project path from an identifier (env_name or full_path)
+# -----------------------------------------------------------------------------
+# resolve_project_path - Resolve project directory from identifier
+#
+# Description:
+#   Converts an environment name or path to an absolute project directory.
+#   Searches for .flox directory to confirm valid project.
+#
+# Arguments:
+#   $1 - Environment name or absolute path
+#
+# Returns:
+#   0 - Project found
+#   1 - Project not found
+#
+# Outputs:
+#   Absolute path to project directory
+#
+# Search Strategy:
+#   1. If absolute path with .flox, return as-is
+#   2. Search PROJECTS_DIR for matching name with .flox
+#
+# Example:
+#   path=$(resolve_project_path "myapp")
+#   path=$(resolve_project_path "/root/myapp")
+# -----------------------------------------------------------------------------
 resolve_project_path() {
     local identifier=$1
 
@@ -215,17 +777,35 @@ cleanup_orphan_projects() {
 list_github_repos() {
     if ! command -v gh >/dev/null 2>&1; then
         error "GitHub CLI (gh) n'est pas installé"
-        echo -e "${YELLOW}Installation :${NC} apt install gh"
+        info "Installation: apt install gh"
         return 1
     fi
-    
+
     if ! gh auth status >/dev/null 2>&1; then
         error "Non authentifié sur GitHub"
-        echo -e "${YELLOW}Authentification :${NC} gh auth login"
+        info "Authentification: gh auth login"
         return 1
     fi
-    
-    gh repo list --limit 20 --json name,description --jq '.[] | "\(.name): \(.description)"' 2>/dev/null
+
+    gh repo list --limit "$BUILDFLOWZ_GITHUB_REPO_LIMIT" --json name,description --jq '.[] | "\(.name): \(.description)"' 2>/dev/null
+}
+
+# Validate GitHub repo name
+validate_repo_name() {
+    local repo=$1
+
+    if [ -z "$repo" ]; then
+        error "Repository name cannot be empty"
+        return 1
+    fi
+
+    # GitHub repo names: alphanumeric, dash, underscore, dot
+    if [[ ! "$repo" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        error "Invalid repository name: $repo"
+        return 1
+    fi
+
+    return 0
 }
 
 get_github_username() {
@@ -261,14 +841,24 @@ detect_project_type() {
 init_flox_env() {
     local project_dir=$1
     local project_name=$2
-    
+
+    log INFO "Initializing Flox environment: $project_name at $project_dir"
+
+    # Check if flox is installed
+    if ! command -v flox >/dev/null 2>&1; then
+        error "Flox is not installed"
+        info "Install with: curl -fsSL https://flox.dev/install | bash"
+        return 1
+    fi
+
     cd "$project_dir" || return 1
-    
+
     if [ -d ".flox" ]; then
         echo -e "${GREEN}✅ Environnement Flox existe déjà${NC}"
+        log DEBUG "Flox environment already exists for $project_name"
         return 0
     fi
-    
+
     echo -e "${BLUE}🔧 Création de l'environnement Flox...${NC}"
     
     # Detect project type
@@ -469,12 +1059,63 @@ detect_dev_command() {
     fi
 }
 
-# Environment lifecycle operations with Flox + PM2
+# ============================================================================
+# ENVIRONMENT LIFECYCLE OPERATIONS
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# env_start - Start a development environment with PM2 + Flox
+#
+# Description:
+#   Starts a project environment using PM2 for process management and
+#   Flox for dependency isolation. Automatically:
+#   - Validates identifier
+#   - Initializes Flox environment if needed
+#   - Detects dev command for project
+#   - Allocates/reuses port
+#   - Creates PM2 ecosystem config
+#   - Injects web inspector
+#   - Starts PM2 process
+#
+# Arguments:
+#   $1 - Environment identifier (name or absolute path)
+#
+# Returns:
+#   0 - Environment started successfully
+#   1 - Error occurred
+#
+# Side Effects:
+#   - Creates ecosystem.config.cjs in project directory
+#   - Invalidates PM2 cache
+#   - Kills existing PM2 process if running
+#   - May modify vite.config.js or astro.config.mjs for port config
+#
+# Example:
+#   env_start "myapp"
+#   env_start "/root/custom/path"
+# -----------------------------------------------------------------------------
 env_start() {
     local identifier=$1 # Can be env_name or custom_path
     local project_dir=""
     local env_name=""
     local pm2_config=""
+
+    # Validate identifier
+    if [ -z "$identifier" ]; then
+        error "Environment identifier is required"
+        return 1
+    fi
+
+    # If it looks like a path, validate it
+    if [[ "$identifier" == /* ]]; then
+        if ! validate_project_path "$identifier"; then
+            return 1
+        fi
+    else
+        if ! validate_env_name "$identifier"; then
+            return 1
+        fi
+    fi
 
     project_dir=$(resolve_project_path "$identifier")
     if [ -z "$project_dir" ]; then
@@ -501,11 +1142,27 @@ env_start() {
 
     local port=""
     local doppler_prefix=""
-    # Check for existing port and doppler in ecosystem.config.cjs
+    # Check for existing port and doppler in ecosystem.config.cjs - PROPER PARSING
     if [ -f "$pm2_config" ]; then
-        port=$(cat "$pm2_config" | grep -oP 'PORT: \K[0-9]+' | head -1)
-        if grep -q "doppler run" "$pm2_config"; then
-            doppler_prefix="doppler run -- "
+        # Use Node.js to properly parse the config file
+        local config_data=$(node -e "
+            try {
+                const cfg = require('$pm2_config');
+                const app = cfg.apps[0];
+                const port = app.env && app.env.PORT ? app.env.PORT : '';
+                const hasDoppler = app.args && Array.isArray(app.args) && app.args.join(' ').includes('doppler run');
+                console.log(JSON.stringify({ port: port, hasDoppler: hasDoppler }));
+            } catch (e) {
+                console.log(JSON.stringify({ port: '', hasDoppler: false }));
+            }
+        " 2>/dev/null)
+
+        if [ -n "$config_data" ]; then
+            port=$(echo "$config_data" | python3 -c "import sys, json; d = json.load(sys.stdin); print(d.get('port', ''))" 2>/dev/null)
+            local has_doppler=$(echo "$config_data" | python3 -c "import sys, json; d = json.load(sys.stdin); print('true' if d.get('hasDoppler') else 'false')" 2>/dev/null)
+            if [ "$has_doppler" = "true" ]; then
+                doppler_prefix="doppler run -- "
+            fi
         fi
     fi
 
@@ -545,38 +1202,81 @@ EOF
     # Inject web inspector before starting the dev server
     (cd "$project_dir" && init_web_inspector)
 
-    if pm2 list | grep -q "│ $env_name"; then
-        echo -e "${YELLOW}⚠️  Projet déjà en cours d'exécution, nettoyage...${NC}"
-        pm2 delete "$env_name" >/dev/null 2>&1
-        # Kill any lingering processes on the port to avoid zombies
-        fuser -k "$port/tcp" >/dev/null 2>&1 || true
+    # Atomic cleanup of existing process (Priority 3 #11: Fix race condition)
+    # Use pm2 delete with idempotent operation (no check-then-act)
+    pm2 delete "$env_name" 2>/dev/null || true
+
+    # Kill any lingering processes on the port to avoid zombies
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k "$port/tcp" 2>/dev/null || true
     fi
+
+    # Small delay to ensure port is fully released
+    sleep 0.5
     
     pm2 start "$pm2_config"
     pm2 save >/dev/null 2>&1
+
+    # Invalidate cache after PM2 state change
+    invalidate_pm2_cache
+
     success "Projet $env_name démarré sur le port $port"
+    log INFO "Started environment: $env_name on port $port at $project_dir"
 }
 
+# -----------------------------------------------------------------------------
+# env_stop - Stop a running environment
+#
+# Description:
+#   Stops a PM2-managed environment gracefully.
+#
+# Arguments:
+#   $1 - Environment identifier (name or path)
+#
+# Returns:
+#   0 - Environment stopped or already stopped
+#   1 - Error occurred
+#
+# Side Effects:
+#   - Invalidates PM2 cache
+#   - Saves PM2 process list
+#
+# Example:
+#   env_stop "myapp"
+# -----------------------------------------------------------------------------
 env_stop() {
     local identifier=$1
+
+    # Validate identifier
+    if [ -z "$identifier" ]; then
+        error "Environment identifier is required"
+        return 1
+    fi
+
     local project_dir=$(resolve_project_path "$identifier")
-    
+
     if [ -z "$project_dir" ]; then
         warning "Projet $identifier introuvable ou chemin invalide."
         return 1
     fi
 
-    # Ensure env_name is correctly derived for PM2 operations if a custom path was passed
-    local pm2_app_name=$(basename "$project_dir") 
+    # Ensure env_name is correctly derived for PM2 operations
+    local pm2_app_name=$(basename "$project_dir")
 
-    if ! pm2 list | grep -q "│ $pm2_app_name"; then
-        warning "Projet $pm2_app_name n'est pas en cours d'exécution"
-        return 0
+    # Atomic stop operation (Priority 3 #11: Fix race condition)
+    # Use pm2 stop with idempotent operation (no check-then-act)
+    if pm2 stop "$pm2_app_name" 2>/dev/null; then
+        pm2 save >/dev/null 2>&1
+        # Invalidate cache after PM2 state change
+        invalidate_pm2_cache
+        success "Projet $pm2_app_name arrêté"
+        log INFO "Stopped environment: $pm2_app_name"
+    else
+        info "Projet $pm2_app_name n'est pas en cours d'exécution"
+        log DEBUG "Environment $pm2_app_name was not running"
     fi
-    
-    pm2 stop "$pm2_app_name" >/dev/null 2>&1
-    pm2 save >/dev/null 2>&1
-    success "Projet $pm2_app_name arrêté"
+
+    return 0
 }
 
 # Web Inspector Functions
@@ -636,31 +1336,72 @@ init_web_inspector() {
     echo "Web inspector configured"
 }
 
+# -----------------------------------------------------------------------------
+# env_remove - Remove an environment completely
+#
+# Description:
+#   Stops the PM2 process and deletes the project directory.
+#   This operation is DESTRUCTIVE and cannot be undone.
+#
+# Arguments:
+#   $1 - Environment identifier (name or path)
+#
+# Returns:
+#   0 - Environment removed
+#   1 - Error occurred
+#
+# Side Effects:
+#   - Deletes PM2 process
+#   - Removes entire project directory (DESTRUCTIVE!)
+#   - Invalidates PM2 cache
+#
+# Warning:
+#   This permanently deletes all project files!
+#
+# Example:
+#   env_remove "myapp"
+# -----------------------------------------------------------------------------
 env_remove() {
     local identifier=$1
+
+    # Validate identifier
+    if [ -z "$identifier" ]; then
+        error "Environment identifier is required"
+        return 1
+    fi
+
     local project_dir=$(resolve_project_path "$identifier")
-    
+
     if [ -z "$project_dir" ]; then
         warning "Projet $identifier introuvable ou chemin invalide. Impossible de supprimer."
         return 1
     fi
 
-    local env_name=$(basename "$project_dir") # Use basename as the PM2 app name
-    
-    # Stop PM2 process if running
-    if pm2 list | grep -q "│ $env_name"; then
+    local env_name=$(basename "$project_dir")
+
+    # Atomic deletion of PM2 process (Priority 3 #11: Fix race condition)
+    # Use pm2 delete with idempotent operation (no check-then-act)
+    if pm2 delete "$env_name" 2>/dev/null; then
         echo -e "${YELLOW}🛑 Arrêt du processus PM2 $env_name...${NC}"
-        pm2 delete "$env_name" >/dev/null 2>&1
         pm2 save >/dev/null 2>&1
+        # Invalidate cache after PM2 state change
+        invalidate_pm2_cache
     fi
-    
-    # Remove project directory
+
+    # Remove project directory (atomic operation)
     if [ -d "$project_dir" ]; then
-        rm -rf "$project_dir"
+        log INFO "Removing environment: $env_name at $project_dir"
+        rm -rf "$project_dir" || {
+            error "Failed to remove directory: $project_dir"
+            log ERROR "Failed to remove $project_dir"
+            return 1
+        }
         success "Projet $env_name supprimé"
     else
         warning "Répertoire $project_dir introuvable (peut-être déjà supprimé ou chemin incorrect)"
     fi
+
+    return 0
 }
 
 

@@ -15,6 +15,11 @@ fi
 
 # Fonction principale avec boucle
 main() {
+    # Check prerequisites on first run
+    if ! check_prerequisites; then
+        exit 1
+    fi
+
     while true; do
         clear
         
@@ -204,8 +209,14 @@ main() {
                 else
                     echo ""
                     SELECTED_REPO=$(echo "$GITHUB_REPOS" | cut -d':' -f1 | gum filter --placeholder "Rechercher un repo...")
-                    
+
                     if [ -n "$SELECTED_REPO" ]; then
+                        # Validate repo name
+                        if ! validate_repo_name "$SELECTED_REPO"; then
+                            gum style --foreground 196 "❌ Invalid repository name"
+                            continue
+                        fi
+
                         PROJECT_NAME="${SELECTED_REPO,,}"
                         PROJECT_DIR="$PROJECTS_DIR/$PROJECT_NAME"
                         
@@ -343,6 +354,8 @@ main() {
                 CUSTOM_PATH=$(gum input --placeholder "Entrez le chemin absolu du projet (ex: /root/my-robots/chatbot)")
                 if [ -z "$CUSTOM_PATH" ]; then
                     gum style --foreground 196 "❌ Chemin requis"
+                elif ! validate_project_path "$CUSTOM_PATH" 2>&1 | while read -r line; do gum style --foreground 196 "$line"; done; then
+                    gum input --placeholder "Appuyez sur Entrée pour continuer..."
                 else
                     gum spin --spinner dot --title "Démarrage du projet à partir de $CUSTOM_PATH..." -- env_start "$CUSTOM_PATH"
                     echo ""
@@ -366,6 +379,7 @@ main() {
                     fi
                 fi
                 ;;
+            "🌐 Publier sur le web")
                 gum style \
                     --foreground 45 --border-foreground 45 --border rounded \
                     --align center --width 50 --padding "0 2" \

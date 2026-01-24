@@ -44,9 +44,14 @@ input() {
 
 # Fonction principale
 main() {
+    # Check prerequisites on first run
+    if ! check_prerequisites; then
+        exit 1
+    fi
+
     # Nettoyer les projets orphelins au démarrage
     cleanup_orphan_projects
-    
+
     while true; do
         clear
         print_header
@@ -238,6 +243,12 @@ main() {
                 if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
                     SELECTED_REPO=$(echo "$GITHUB_REPOS" | sed -n "${choice}p" | cut -d':' -f1)
 
+                    # Validate repo name
+                    if ! validate_repo_name "$SELECTED_REPO"; then
+                        echo -e "${RED}❌ Invalid repository name${NC}"
+                        continue
+                    fi
+
                     echo ""
                     echo -e "${GREEN}📦 Repo sélectionné : $SELECTED_REPO${NC}"
                     echo -e "${BLUE}🚀 Déploiement en cours...${NC}"
@@ -409,6 +420,9 @@ main() {
 
                 if [ -z "$CUSTOM_PATH" ]; then
                     echo -e "${RED}❌ Chemin requis${NC}"
+                elif ! validate_project_path "$CUSTOM_PATH"; then
+                    # Error already displayed by validate_project_path
+                    :
                 else
                     echo -e "${GREEN}▶️  Démarrage du projet à partir de $CUSTOM_PATH...${NC}"
                     env_start "$CUSTOM_PATH"

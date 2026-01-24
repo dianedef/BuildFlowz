@@ -3,9 +3,29 @@
 
 set -e
 
-REMOTE_USER="${REMOTE_USER:-root}"
-REMOTE_HOST="${REMOTE_HOST:-hetzner}"
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../config.sh" ]; then
+    source "$SCRIPT_DIR/../config.sh"
+fi
+
+REMOTE_USER="${REMOTE_USER:-$BUILDFLOWZ_SSH_REMOTE_USER}"
+REMOTE_HOST="${REMOTE_HOST:-$BUILDFLOWZ_SSH_REMOTE_HOST}"
 SSH_CONFIG="$HOME/.ssh/config"
+
+# Validate remote host name
+if [[ ! "$REMOTE_HOST" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo -e "${RED}✗ Invalid REMOTE_HOST: $REMOTE_HOST${NC}"
+    echo -e "${YELLOW}  Host name can only contain letters, numbers, dash, underscore, dot${NC}"
+    exit 1
+fi
+
+# Validate remote user name
+if [[ ! "$REMOTE_USER" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    echo -e "${RED}✗ Invalid REMOTE_USER: $REMOTE_USER${NC}"
+    echo -e "${YELLOW}  User name can only contain letters, numbers, dash, underscore, dot${NC}"
+    exit 1
+fi
 
 # Couleurs
 RED='\033[0;31m'
@@ -74,8 +94,8 @@ for port_info in "${PORT_ARRAY[@]}"; do
     
     # Créer le tunnel avec autossh (maintient la connexion)
     autossh -M 0 -f -N \
-        -o "ServerAliveInterval=30" \
-        -o "ServerAliveCountMax=3" \
+        -o "ServerAliveInterval=${BUILDFLOWZ_SSH_KEEPALIVE_INTERVAL:-30}" \
+        -o "ServerAliveCountMax=${BUILDFLOWZ_SSH_KEEPALIVE_MAX:-3}" \
         -o "ExitOnForwardFailure=yes" \
         -L "${port}:localhost:${port}" \
         "$REMOTE_HOST" 2>/dev/null
