@@ -27,7 +27,7 @@ main() {
         # Menu de sélection
         CHOICE=$(gum choose "📁 Naviguer dans /root" "📋 Lister les environnements" "🌐 Afficher les URLs" "🛑 Stopper un environnement" "📝 Ouvrir le répertoire de code" "🚀 Déployer un repo GitHub" "🗑️ Supprimer un environnement"             "🚀 Démarrer un environnement" \
             "🚀 Démarrer un environnement (custom path)" \
-            "🌐 Publier sur le web" "👋 Quitter")
+            "🌐 Publier sur le web" "🔍 Basculer l'inspecteur web" "👋 Quitter")
 
         case $CHOICE in
             "📁 Naviguer dans /root")
@@ -494,6 +494,23 @@ except:
             "👋 Quitter")
                 gum style --foreground 196 "Au revoir! 👋"
                 exit 0
+                ;;
+            "🔍 Basculer l'inspecteur web")
+                clear
+                gum style \
+                    --foreground 212 --border-foreground 212 --border double \
+                    --align center --width 50 --margin "1 2" --padding "1 2" \
+                    "Web Inspector" "Démarrage de l'inspecteur web"
+                
+                echo ""
+                gum spin --spinner dot --title "Démarrage de l'inspecteur web..." -- sleep 1
+                
+                # Initialize web inspector
+                init_web_inspector
+                
+                echo ""
+                gum style --foreground 82 "✅ Inspecteur web démarré !"
+                gum input --placeholder "Appuyez sur Entrée pour continuer..."
                 ;;
         esac
         

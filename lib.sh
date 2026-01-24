@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Shared library for Dokploy CLI
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Contains all reusable functions and logic
 
 # Colors
@@ -540,7 +541,10 @@ module.exports = {
 EOF
     
     echo -e "${GREEN}✅ Fichier ecosystem.config.cjs créé/mis à jour${NC}"
-    
+
+    # Inject web inspector before starting the dev server
+    (cd "$project_dir" && init_web_inspector)
+
     if pm2 list | grep -q "│ $env_name"; then
         echo -e "${YELLOW}⚠️  Projet déjà en cours d'exécution, nettoyage...${NC}"
         pm2 delete "$env_name" >/dev/null 2>&1
@@ -573,6 +577,63 @@ env_stop() {
     pm2 stop "$pm2_app_name" >/dev/null 2>&1
     pm2 save >/dev/null 2>&1
     success "Projet $pm2_app_name arrêté"
+}
+
+# Web Inspector Functions
+# Generate CSS selector for an element
+generate_css_selector() {
+    local element="$1"
+    echo "css-selector-for-$element" | sed 's/[^a-zA-Z0-9_-]/-/g'
+}
+
+# Initialize web inspector
+init_web_inspector() {
+    local script_path="${SCRIPT_DIR}/injectors/web-inspector.js"
+
+    if [ ! -f "$script_path" ]; then
+        echo "Error: Web inspector script not found at $script_path"
+        return 1
+    fi
+
+    # Step 1: Copy script to project's public/ directory
+    mkdir -p public
+    cp "$script_path" public/buildflowz-inspector.js
+    echo "Copied web inspector to public/buildflowz-inspector.js"
+
+    local script_tag='<script src="/buildflowz-inspector.js" defer></script>'
+    local marker="<!-- buildflowz-inspector -->"
+
+    # Step 2: Add script tag to the appropriate file
+    if [ -f "index.html" ]; then
+        # Vite/React/Vue projects with root index.html
+        if ! grep -q "buildflowz-inspector" "index.html"; then
+            sed -i "s|</body>|  ${marker}\n  ${script_tag}\n</body>|" "index.html"
+            echo "Injected script tag into index.html"
+        else
+            echo "Script tag already present in index.html"
+        fi
+    elif [ -f "package.json" ] && grep -q '"astro"' package.json; then
+        # Astro projects: inject into layout files
+        local injected=false
+        for layout in src/layouts/*.astro; do
+            [ -f "$layout" ] || continue
+            if grep -q "</body>" "$layout" && ! grep -q "buildflowz-inspector" "$layout"; then
+                sed -i "s|</body>|  ${marker}\n  ${script_tag}\n</body>|" "$layout"
+                echo "Injected script tag into $layout"
+                injected=true
+            elif grep -q "buildflowz-inspector" "$layout"; then
+                echo "Script tag already present in $layout"
+                injected=true
+            fi
+        done
+        if [ "$injected" = false ]; then
+            echo "Warning: No layout with </body> found for Astro project"
+        fi
+    else
+        echo "Warning: Could not find injection target (no index.html or Astro layout)"
+    fi
+
+    echo "Web inspector configured"
 }
 
 env_remove() {
