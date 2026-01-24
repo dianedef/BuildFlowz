@@ -1648,4 +1648,155 @@ view_environment_logs() {
     return 0
 }
 
+# -----------------------------------------------------------------------------
+# deploy_github_project - Deploy a project from GitHub repository
+#
+# Description:
+#   Complete workflow to deploy a GitHub repository:
+#   - Creates project directory
+#   - Clones repository from GitHub
+#   - Initializes Flox environment
+#   - Starts the application with PM2
+#   - Handles existing projects (asks to replace)
+#
+# Arguments:
+#   $1 - Repository name (e.g., "my-repo")
+#
+# Returns:
+#   0 - Successfully deployed
+#   1 - Error occurred
+#
+# Outputs:
+#   Progress messages and final URLs to stdout
+#
+# Side Effects:
+#   - Creates directory in PROJECTS_DIR
+#   - Clones git repository
+#   - Initializes Flox environment
+#   - Starts PM2 process
+#
+# Example:
+#   deploy_github_project "my-awesome-app"
+# -----------------------------------------------------------------------------
+deploy_github_project() {
+    local repo_name=$1
+
+    if [ -z "$repo_name" ]; then
+        error "Usage: deploy_github_project <repo-name>"
+        return 1
+    fi
+
+    # Validate repo name
+    if ! validate_repo_name "$repo_name"; then
+        error "Invalid repository name: $repo_name"
+        return 1
+    fi
+
+    echo ""
+    echo -e "${GREEN}📦 Repository: $repo_name${NC}"
+    echo -e "${BLUE}🚀 Starting deployment...${NC}"
+    echo ""
+
+    # Project setup
+    local project_name="${repo_name,,}"  # lowercase
+    local project_dir="$PROJECTS_DIR/$project_name"
+
+    # Check if project already exists
+    local existing_project=$(resolve_project_path "$project_name")
+    if [ -n "$existing_project" ]; then
+        echo -e "${YELLOW}⚠️  Project $project_name already exists at $existing_project${NC}"
+        echo -e "${YELLOW}Replace it? (yes/N):${NC} \c"
+        read -r confirm
+
+        if [[ ! "$confirm" =~ ^(yes|YES)$ ]]; then
+            echo -e "${BLUE}❌ Cancelled${NC}"
+            return 1
+        fi
+
+        # Remove old project
+        echo -e "${YELLOW}Removing old project...${NC}"
+        env_remove "$project_name"
+    fi
+
+    # Create project directory
+    echo -e "${YELLOW}Creating project directory: $project_dir${NC}"
+    mkdir -p "$project_dir"
+
+    # Clone repository
+    local github_user=$(get_github_username)
+    if [ -z "$github_user" ]; then
+        error "Could not determine GitHub username"
+        rm -rf "$project_dir"
+        return 1
+    fi
+
+    local repo_url="https://github.com/$github_user/$repo_name.git"
+    echo -e "${YELLOW}Cloning: $repo_url${NC}"
+    echo ""
+
+    if git clone "$repo_url" "$project_dir"; then
+        echo ""
+        echo -e "${GREEN}✅ Repository cloned successfully${NC}"
+    else
+        echo ""
+        echo -e "${RED}❌ Failed to clone repository${NC}"
+        echo -e "${YELLOW}Please check:${NC}"
+        echo -e "  • Repository exists: https://github.com/$github_user/$repo_name"
+        echo -e "  • You have access to this repository"
+        echo -e "  • GitHub authentication is configured (gh auth login)"
+        rm -rf "$project_dir"
+        return 1
+    fi
+
+    # Initialize Flox environment
+    echo ""
+    echo -e "${YELLOW}🔧 Initializing Flox environment...${NC}"
+    if ! init_flox_env "$project_dir" "$project_name"; then
+        echo -e "${RED}❌ Flox initialization failed${NC}"
+        echo -e "${YELLOW}Cleanup: Removing project directory${NC}"
+        rm -rf "$project_dir"
+        return 1
+    fi
+
+    # Start the environment
+    echo ""
+    echo -e "${GREEN}🚀 Starting application...${NC}"
+    if ! env_start "$project_name"; then
+        echo -e "${RED}❌ Failed to start application${NC}"
+        echo -e "${YELLOW}Project cloned but not started. Try manually:${NC}"
+        echo -e "  cd $project_dir"
+        echo -e "  flox activate"
+        return 1
+    fi
+
+    # Get port and display success
+    local port=$(get_port_from_pm2 "$project_name")
+
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║            ✅ Deployment Successful!             ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${BLUE}📊 Project Information:${NC}"
+    echo -e "  • Name: $project_name"
+    echo -e "  • Directory: $project_dir"
+
+    if [ -n "$port" ]; then
+        echo -e "  • Port: $port"
+        echo ""
+        echo -e "${BLUE}🌐 Access URLs:${NC}"
+        echo -e "  • Local: ${CYAN}http://localhost:$port${NC}"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}📝 Next steps:${NC}"
+    echo -e "  • View logs: Option 7 → View Logs → Select '$project_name'"
+    echo -e "  • Edit code: cd $project_dir"
+    echo -e "  • Publish web: Option 6 (Publish to Web)"
+    echo ""
+
+    log INFO "Successfully deployed GitHub project: $repo_name"
+    return 0
+}
+
 
