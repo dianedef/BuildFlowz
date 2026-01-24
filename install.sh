@@ -121,7 +121,7 @@ echo ""
 # 5. Installer les outils système nécessaires
 info "Vérification des outils système..."
 
-TOOLS_TO_CHECK=("git" "curl" "python3" "ss")
+TOOLS_TO_CHECK=("git" "curl" "python3" "ss" "jq" "fuser")
 MISSING_TOOLS=()
 
 for tool in "${TOOLS_TO_CHECK[@]}"; do
@@ -139,6 +139,12 @@ if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
         case $tool in
             "ss")
                 apt-get install -y iproute2
+                ;;
+            "jq")
+                apt-get install -y jq
+                ;;
+            "fuser")
+                apt-get install -y psmisc
                 ;;
             *)
                 apt-get install -y "$tool"
@@ -242,6 +248,8 @@ echo -e "  • Caddy: $(command -v caddy >/dev/null 2>&1 && echo '✅' || echo '
 echo -e "  • Python3: $(command -v python3 >/dev/null 2>&1 && echo '✅' || echo '❌')"
 echo -e "  • PyYAML: $(python3 -c 'import yaml' 2>/dev/null && echo '✅' || echo '❌')"
 echo -e "  • Git: $(command -v git >/dev/null 2>&1 && echo '✅' || echo '❌')"
+echo -e "  • jq: $(command -v jq >/dev/null 2>&1 && echo '✅ (2-5x faster JSON)' || echo '❌')"
+echo -e "  • fuser: $(command -v fuser >/dev/null 2>&1 && echo '✅ (port cleanup)' || echo '❌')"
 echo ""
 
 success "Vous pouvez maintenant utiliser le menu DevServer !"
