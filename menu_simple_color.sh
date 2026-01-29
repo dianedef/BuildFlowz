@@ -38,29 +38,30 @@ show_menu() {
 }
 
 # Fonction de sélection d'environnement
+# Note: Display output goes to stderr so command substitution captures only the result
 select_environment() {
     local prompt_text="${1:-Sélectionnez un environnement}"
 
     ALL_ENVS=$(list_all_environments)
 
     if [ -z "$ALL_ENVS" ]; then
-        echo -e "${RED}❌ Aucun environnement trouvé${NC}"
+        echo -e "${RED}❌ Aucun environnement trouvé${NC}" >&2
         return 1
     fi
 
-    echo -e "${BLUE}$prompt_text :${NC}"
-    echo ""
+    echo -e "${BLUE}$prompt_text :${NC}" >&2
+    echo "" >&2
 
     i=1
     while IFS= read -r env; do
-        echo -e "  ${CYAN}$i)${NC} $env"
+        echo -e "  ${CYAN}$i)${NC} $env" >&2
         ((i++))
     done <<< "$ALL_ENVS"
 
-    echo ""
-    echo -e "  ${CYAN}0)${NC} Annuler"
-    echo ""
-    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c"
+    echo "" >&2
+    echo -e "  ${CYAN}0)${NC} Annuler" >&2
+    echo "" >&2
+    echo -e "${YELLOW}Choisissez un numéro (0-$((i-1))) :${NC} \c" >&2
     read -r choice
 
     if [[ "$choice" == "0" ]]; then
@@ -69,7 +70,7 @@ select_environment() {
         echo "$ALL_ENVS" | sed -n "${choice}p"
         return 0
     else
-        echo -e "${RED}❌ Choix invalide${NC}"
+        echo -e "${RED}❌ Choix invalide${NC}" >&2
         return 1
     fi
 }
