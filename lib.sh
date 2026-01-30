@@ -720,7 +720,7 @@ resolve_project_path() {
 
     # Case 2: Identifier is an environment name, search within PROJECTS_DIR
     local found_path
-    found_path=$(find "$PROJECTS_DIR" -maxdepth 3 -type d -name "$identifier" 2>/dev/null | while read -r project_dir; do
+    found_path=$(find "$PROJECTS_DIR" -maxdepth 4 -type d -name "$identifier" 2>/dev/null | while read -r project_dir; do
         if [ -d "$project_dir/.flox" ]; then
             echo "$project_dir"
             exit 0
@@ -738,7 +738,7 @@ resolve_project_path() {
 # List all environments (projects with Flox env)
 list_all_environments() {
     if [ -d "$PROJECTS_DIR" ]; then
-        find "$PROJECTS_DIR" -maxdepth 3 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
+        find "$PROJECTS_DIR" -maxdepth 4 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
             # Extract the project name from the path, e.g., /root/my-robots/chatbot/.flox -> chatbot
             echo "$(basename "$(dirname "$flox_dir")")"
         done | grep -v "^\.$" | sort

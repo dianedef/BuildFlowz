@@ -230,7 +230,7 @@ main() {
 
                         # First: detect existing BuildFlowz environments (have .flox directory)
                         # Exclude hidden directories (except .flox itself)
-                        EXISTING_ENVS=$(find "$PROJECTS_DIR" -maxdepth 3 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
+                        EXISTING_ENVS=$(find "$PROJECTS_DIR" -maxdepth 4 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
                             proj_dir=$(dirname "$flox_dir")
                             # Skip if project is inside a hidden directory (e.g., .cache, .config)
                             case "$proj_dir" in
@@ -241,7 +241,7 @@ main() {
 
                         # Second: detect new projects (have manifest files but no .flox yet)
                         # Exclude hidden directories
-                        NEW_PROJECTS=$(find "$PROJECTS_DIR" -maxdepth 3 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | while read -r manifest; do
+                        NEW_PROJECTS=$(find "$PROJECTS_DIR" -maxdepth 4 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | while read -r manifest; do
                             proj_dir=$(dirname "$manifest")
                             # Skip if inside a hidden directory
                             case "$proj_dir" in

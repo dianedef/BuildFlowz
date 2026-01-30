@@ -14,7 +14,7 @@ export BUILDFLOWZ_PROJECTS_DIR="${BUILDFLOWZ_PROJECTS_DIR:-$HOME}"
 export BUILDFLOWZ_SAFE_DIRS=("/root" "/home" "/opt")
 
 # Maximum depth for searching projects
-export BUILDFLOWZ_MAX_SEARCH_DEPTH=3
+export BUILDFLOWZ_MAX_SEARCH_DEPTH=4
 
 # ============================================================================
 # PORT CONFIGURATION
