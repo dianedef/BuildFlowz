@@ -649,7 +649,7 @@ get_pm2_status() {
         echo "$status"
         return 0
     else
-        echo "stopped"
+        echo "not_found"
         return 0
     fi
 }
