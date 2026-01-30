@@ -7,7 +7,8 @@
 # ============================================================================
 
 # Main projects directory where environments are created
-export BUILDFLOWZ_PROJECTS_DIR="${BUILDFLOWZ_PROJECTS_DIR:-/root}"
+# Defaults to $HOME (works for any user: /root for root, /home/user for others)
+export BUILDFLOWZ_PROJECTS_DIR="${BUILDFLOWZ_PROJECTS_DIR:-$HOME}"
 
 # Allowed safe directories for project paths
 export BUILDFLOWZ_SAFE_DIRS=("/root" "/home" "/opt")

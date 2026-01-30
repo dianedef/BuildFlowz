@@ -226,8 +226,35 @@ main() {
                 case $deploy_choice in
                     1)
                         # Auto-detect projects
-                        echo -e "${BLUE}🔍 Scanning /root for projects...${NC}"
-                        PROJECTS=$(find /root -maxdepth 2 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | xargs -I{} dirname {} | sort -u)
+                        echo -e "${BLUE}🔍 Scanning $PROJECTS_DIR for projects...${NC}"
+
+                        # First: detect existing BuildFlowz environments (have .flox directory)
+                        # Exclude hidden directories (except .flox itself)
+                        EXISTING_ENVS=$(find "$PROJECTS_DIR" -maxdepth 3 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
+                            proj_dir=$(dirname "$flox_dir")
+                            # Skip if project is inside a hidden directory (e.g., .cache, .config)
+                            case "$proj_dir" in
+                                "$PROJECTS_DIR"/.*) continue ;;
+                                *) echo "$proj_dir" ;;
+                            esac
+                        done | sort -u)
+
+                        # Second: detect new projects (have manifest files but no .flox yet)
+                        # Exclude hidden directories
+                        NEW_PROJECTS=$(find "$PROJECTS_DIR" -maxdepth 3 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | while read -r manifest; do
+                            proj_dir=$(dirname "$manifest")
+                            # Skip if inside a hidden directory
+                            case "$proj_dir" in
+                                "$PROJECTS_DIR"/.*) continue ;;
+                            esac
+                            # Only include if NOT already a BuildFlowz environment
+                            if [ ! -d "$proj_dir/.flox" ]; then
+                                echo "$proj_dir"
+                            fi
+                        done | sort -u)
+
+                        # Combine both lists (existing first, then new)
+                        PROJECTS=$(printf "%s\n%s" "$EXISTING_ENVS" "$NEW_PROJECTS" | grep -v "^$" | sort -u)
 
                         if [ -z "$PROJECTS" ]; then
                             echo -e "${YELLOW}⚠️  No projects detected${NC}"
