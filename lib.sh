@@ -1730,8 +1730,8 @@ deploy_github_project() {
         return 1
     fi
 
-    local repo_url="https://github.com/$github_user/$repo_name.git"
-    echo -e "${YELLOW}Cloning: $repo_url${NC}"
+    local repo_url="git@github.com:$github_user/$repo_name.git"
+    echo -e "${YELLOW}Cloning (SSH): $repo_url${NC}"
     echo ""
 
     if git clone "$repo_url" "$project_dir"; then
@@ -1742,8 +1742,8 @@ deploy_github_project() {
         echo -e "${RED}❌ Failed to clone repository${NC}"
         echo -e "${YELLOW}Please check:${NC}"
         echo -e "  • Repository exists: https://github.com/$github_user/$repo_name"
-        echo -e "  • You have access to this repository"
-        echo -e "  • GitHub authentication is configured (gh auth login)"
+        echo -e "  • SSH key is configured: ssh -T git@github.com"
+        echo -e "  • Or use: gh auth login --with-token"
         rm -rf "$project_dir"
         return 1
     fi
