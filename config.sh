@@ -44,8 +44,8 @@ export BUILDFLOWZ_SSH_REMOTE_HOST="${BUILDFLOWZ_SSH_REMOTE_HOST:-hetzner}"
 # Enable/disable logging (true/false)
 export BUILDFLOWZ_LOGGING_ENABLED="${BUILDFLOWZ_LOGGING_ENABLED:-true}"
 
-# Log file location
-export BUILDFLOWZ_LOG_DIR="${BUILDFLOWZ_LOG_DIR:-/var/log/buildflowz}"
+# Log file location (defaults to user's home directory for proper permissions)
+export BUILDFLOWZ_LOG_DIR="${BUILDFLOWZ_LOG_DIR:-$HOME/.buildflowz/logs}"
 export BUILDFLOWZ_LOG_FILE="${BUILDFLOWZ_LOG_DIR}/buildflowz.log"
 
 # Log retention (days)
