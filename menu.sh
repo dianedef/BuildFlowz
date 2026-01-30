@@ -22,12 +22,40 @@ main() {
 
     while true; do
         clear
-        
+
         # Titre stylisé
         gum style \
             --foreground 212 --border-foreground 212 --border double \
             --align center --width 50 --margin "1 2" --padding "1 2" \
             "BuildFlowz" "Menu Interactif avec Gum"
+
+        # Display session identity if enabled
+        if [ "$BUILDFLOWZ_SESSION_ENABLED" = "true" ]; then
+            init_session 2>/dev/null
+            local session_id=$(get_session_id 2>/dev/null)
+            if [ -n "$session_id" ]; then
+                local hash_art=$(generate_hash_art "$session_id" 2>/dev/null)
+                local session_code=$(get_session_code "$session_id" 2>/dev/null)
+                local user="${USER:-unknown}"
+                local host="${HOSTNAME:-$(hostname 2>/dev/null || echo 'unknown')}"
+
+                # Display session banner with gum
+                echo ""
+                gum style \
+                    --foreground 141 --border-foreground 141 --border rounded \
+                    --align center --width 50 --padding "0 2" \
+                    "Session Identity"
+
+                # Display hash art
+                echo "$hash_art" | gum style --foreground 45 --align center --width 50
+
+                # Display user info and session code
+                gum style \
+                    --foreground 82 --align center --width 50 \
+                    "$user@$host    $session_code"
+                echo ""
+            fi
+        fi
 
         # Menu de sélection
         CHOICE=$(gum choose "📁 Naviguer dans /root" "📋 Lister les environnements" "🌐 Afficher les URLs" "🛑 Stopper un environnement" "📝 Ouvrir le répertoire de code" "🚀 Déployer un repo GitHub" "🗑️ Supprimer un environnement"             "🚀 Démarrer un environnement" \

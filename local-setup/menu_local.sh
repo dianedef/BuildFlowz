@@ -11,9 +11,72 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 REMOTE_HOST="hetzner"
+
+# Cached session info (to avoid repeated SSH calls)
+CACHED_SESSION_INFO=""
+CACHED_SESSION_TIME=0
+
+# Function to retrieve server session info (with caching)
+get_server_session_info() {
+    local current_time=$(date +%s)
+    local cache_ttl=300  # Cache for 5 minutes
+
+    # Return cached info if fresh
+    if [ -n "$CACHED_SESSION_INFO" ] && [ $((current_time - CACHED_SESSION_TIME)) -lt $cache_ttl ]; then
+        echo "$CACHED_SESSION_INFO"
+        return 0
+    fi
+
+    # Retrieve session info from server
+    CACHED_SESSION_INFO=$(ssh -o ConnectTimeout=5 "$REMOTE_HOST" "
+        if [ -f ~/BuildFlowz/lib.sh ]; then
+            source ~/BuildFlowz/lib.sh 2>/dev/null
+            get_session_info_for_ssh 2>/dev/null
+        elif [ -f ~/.buildflowz/lib.sh ]; then
+            source ~/.buildflowz/lib.sh 2>/dev/null
+            get_session_info_for_ssh 2>/dev/null
+        else
+            echo 'SESSION_NOT_FOUND'
+        fi
+    " 2>/dev/null)
+
+    CACHED_SESSION_TIME=$current_time
+    echo "$CACHED_SESSION_INFO"
+}
+
+# Function to display server session banner
+display_server_session_banner() {
+    local session_info=$(get_server_session_info)
+
+    if echo "$session_info" | grep -q "SESSION_START"; then
+        # Parse session info
+        local session_user=$(echo "$session_info" | grep "^USER:" | cut -d: -f2)
+        local session_host=$(echo "$session_info" | grep "^HOST:" | cut -d: -f2)
+        local session_code=$(echo "$session_info" | grep "^CODE:" | cut -d: -f2)
+        local hash_art=$(echo "$session_info" | sed -n '/---HASH_ART_START---/,/---HASH_ART_END---/p' | grep -v "^---")
+
+        echo -e "${CYAN}┌──────────────────────────────────────────────────┐${NC}"
+        echo -e "${CYAN}│${NC}        ${MAGENTA}🔗 Server Session Identity${NC}             ${CYAN}│${NC}"
+        echo -e "${CYAN}├──────────────────────────────────────────────────┤${NC}"
+
+        # Display hash art with padding
+        while IFS= read -r line; do
+            printf "${CYAN}│${NC}               %s               ${CYAN}│${NC}\n" "$line"
+        done <<< "$hash_art"
+
+        echo -e "${CYAN}├──────────────────────────────────────────────────┤${NC}"
+        printf "${CYAN}│${NC}    ${GREEN}%-15s${NC}   ${YELLOW}%-20s${NC}   ${CYAN}│${NC}\n" "$session_user@$session_host" "$session_code"
+        echo -e "${CYAN}└──────────────────────────────────────────────────┘${NC}"
+    elif echo "$session_info" | grep -q "SESSION_NOT_FOUND"; then
+        echo -e "${YELLOW}⚠ Session identity unavailable (BuildFlowz not found on server)${NC}"
+    elif [ -z "$session_info" ]; then
+        echo -e "${YELLOW}⚠ Could not connect to server${NC}"
+    fi
+}
 
 # Fonction d'affichage avec couleurs
 print_header() {
@@ -21,6 +84,10 @@ print_header() {
     echo -e "${CYAN}║${NC}              ${YELLOW}BuildFlowz - Local${NC}              ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}           ${BLUE}SSH Tunnel Manager${NC}              ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Display server session identity
+    display_server_session_banner
     echo ""
 }
 

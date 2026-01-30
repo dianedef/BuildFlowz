@@ -14,6 +14,13 @@ print_header() {
     echo -e "${CYAN}║${NC}           ${BLUE}Development Environment${NC}          ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
+
+    # Display session identity banner if enabled
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" = "true" ]; then
+        init_session 2>/dev/null
+        display_session_banner
+        echo ""
+    fi
 }
 
 # Fonction d'affichage du menu
@@ -90,6 +97,7 @@ show_advanced_menu() {
         echo -e "  ${CYAN}2)${NC} 📁 Navigate Projects - Browse /root directory"
         echo -e "  ${CYAN}3)${NC} 📂 Open Code Directory - cd into project"
         echo -e "  ${CYAN}4)${NC} 🔍 Toggle Web Inspector - Enable/disable browser inspector"
+        echo -e "  ${CYAN}5)${NC} 🔐 Session Identity - View or reset session"
         echo ""
         echo -e "  ${CYAN}0)${NC} ← Back to Main Menu"
         echo ""
@@ -169,6 +177,46 @@ show_advanced_menu() {
                         env_restart "$ENV_NAME"
                     fi
                 fi
+                ;;
+            5)
+                # Session Identity Management
+                echo -e "${GREEN}🔐 Session Identity Management${NC}"
+                echo ""
+
+                # Display current session
+                display_session_banner
+                echo ""
+                get_session_info
+                echo ""
+
+                echo -e "${BLUE}Options:${NC}"
+                echo -e "  ${CYAN}1)${NC} 🔄 Reset Session Identity (generate new pattern)"
+                echo -e "  ${CYAN}0)${NC} ← Back"
+                echo ""
+                echo -e "${YELLOW}Your choice:${NC} \c"
+                read -r session_choice
+
+                case $session_choice in
+                    1)
+                        echo ""
+                        echo -e "${YELLOW}⚠️  This will generate a new session identity.${NC}"
+                        echo -e "${YELLOW}Your hash art pattern and code will change.${NC}"
+                        echo ""
+                        echo -e "${YELLOW}Continue? (yes/N):${NC} \c"
+                        read -r confirm
+
+                        if [[ "$confirm" =~ ^(yes|YES)$ ]]; then
+                            reset_session
+                            echo ""
+                            echo -e "${GREEN}New session identity:${NC}"
+                            display_session_banner
+                        else
+                            echo -e "${BLUE}Cancelled${NC}"
+                        fi
+                        ;;
+                    *)
+                        ;;
+                esac
                 ;;
             0)
                 # Return to main menu

@@ -773,6 +773,423 @@ cleanup_orphan_projects() {
     echo -e "${GREEN}✅ Nettoyage terminé${NC}"
 }
 
+# ============================================================================
+# SESSION IDENTITY FUNCTIONS
+# ============================================================================
+
+# Word list for human-readable session codes
+SESSION_WORDS=(
+    "CORAL" "WAVE" "STORM" "TIGER" "EMBER" "FROST" "SOLAR" "LUNAR" "DELTA" "ALPHA"
+    "CYBER" "NEXUS" "PULSE" "DRIFT" "SPARK" "BLAZE" "CLOUD" "SWIFT" "GHOST" "PRIME"
+    "OMEGA" "SIGMA" "AZURE" "FLAME" "SHADE" "LIGHT" "STONE" "RIVER" "FORGE" "STEEL"
+    "NOVA" "QUEST" "PIXEL" "VORTEX" "COMET" "ORBIT" "PRISM" "QUARK" "SONIC" "TURBO"
+    "BOLT" "FLASH" "FROST" "GLEAM" "HAZE" "JADE" "KARMA" "LOTUS" "MAGIC" "NEON"
+)
+
+# -----------------------------------------------------------------------------
+# init_session - Initialize session identity for this server/user
+#
+# Description:
+#   Creates the session directory and generates a unique session ID if not
+#   already present. The session ID is based on USER, HOSTNAME, and creation
+#   timestamp, making it unique and persistent.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#   1 - Error creating directory
+#
+# Side Effects:
+#   - Creates ~/.buildflowz/session/ directory
+#   - Creates session_id file if not present
+#
+# Example:
+#   init_session
+# -----------------------------------------------------------------------------
+init_session() {
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" != "true" ]; then
+        return 0
+    fi
+
+    # Create session directory
+    if ! mkdir -p "$BUILDFLOWZ_SESSION_DIR" 2>/dev/null; then
+        log ERROR "Failed to create session directory: $BUILDFLOWZ_SESSION_DIR"
+        return 1
+    fi
+
+    local session_file="$BUILDFLOWZ_SESSION_DIR/session_id"
+
+    # Generate session ID if not present
+    if [ ! -f "$session_file" ]; then
+        local timestamp=$(date +%s)
+        local user="${USER:-unknown}"
+        local host="${HOSTNAME:-$(hostname 2>/dev/null || echo 'unknown')}"
+        local random_part=$(head -c 16 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n' || echo "$RANDOM$RANDOM")
+
+        # Create unique session ID
+        local session_id="${user}@${host}:${timestamp}:${random_part}"
+
+        echo "$session_id" > "$session_file"
+        log INFO "Created new session ID for $user@$host"
+    fi
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# get_session_id - Retrieve the current session ID
+#
+# Description:
+#   Returns the session ID, initializing the session if needed.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#   1 - Session disabled or error
+#
+# Outputs:
+#   Session ID string to stdout
+#
+# Example:
+#   session_id=$(get_session_id)
+# -----------------------------------------------------------------------------
+get_session_id() {
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" != "true" ]; then
+        return 1
+    fi
+
+    local session_file="$BUILDFLOWZ_SESSION_DIR/session_id"
+
+    # Initialize if needed
+    if [ ! -f "$session_file" ]; then
+        init_session || return 1
+    fi
+
+    cat "$session_file" 2>/dev/null
+}
+
+# -----------------------------------------------------------------------------
+# generate_hash_art - Generate deterministic ASCII art from session ID
+#
+# Description:
+#   Creates a unique 5x20 ASCII pattern from a session ID using SHA256 hash.
+#   The pattern is deterministic - same session ID always produces same art.
+#
+# Arguments:
+#   $1 - Session ID string
+#
+# Returns:
+#   0 - Success
+#
+# Outputs:
+#   5-line ASCII art pattern to stdout
+#
+# Example:
+#   generate_hash_art "user@host:123456:abc"
+# -----------------------------------------------------------------------------
+generate_hash_art() {
+    local session_id="$1"
+
+    if [ -z "$session_id" ]; then
+        return 1
+    fi
+
+    # Generate SHA256 hash
+    local hash
+    if command -v sha256sum >/dev/null 2>&1; then
+        hash=$(echo -n "$session_id" | sha256sum | cut -d' ' -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+        hash=$(echo -n "$session_id" | shasum -a 256 | cut -d' ' -f1)
+    else
+        # Fallback: use md5 if available
+        if command -v md5sum >/dev/null 2>&1; then
+            hash=$(echo -n "$session_id" | md5sum | cut -d' ' -f1)
+            hash="${hash}${hash}"  # Double it for length
+        else
+            log ERROR "No hash utility available (sha256sum, shasum, or md5sum)"
+            return 1
+        fi
+    fi
+
+    # Characters for the art (from sparse to dense)
+    local chars=("·" "░" "▒" "▓" "█")
+    local width=20
+    local height=5
+    local art=""
+
+    for ((row=0; row<height; row++)); do
+        local line=""
+        for ((col=0; col<width; col++)); do
+            # Extract 2 characters from hash based on position
+            local pos=$(( (row * width + col) * 2 % 64 ))
+            local hex_val="${hash:$pos:2}"
+
+            # Convert hex to decimal and map to character index (0-4)
+            local dec_val=$((16#$hex_val % 5))
+            line+="${chars[$dec_val]}"
+        done
+
+        if [ $row -lt $((height - 1)) ]; then
+            art+="$line\n"
+        else
+            art+="$line"
+        fi
+    done
+
+    echo -e "$art"
+}
+
+# -----------------------------------------------------------------------------
+# get_session_code - Generate human-readable session code
+#
+# Description:
+#   Creates a memorable code in format WORD-WORD-XX from session ID.
+#   Deterministic - same session ID always produces same code.
+#
+# Arguments:
+#   $1 - Session ID string
+#
+# Returns:
+#   0 - Success
+#
+# Outputs:
+#   Session code string (e.g., "CORAL-WAVE-7F") to stdout
+#
+# Example:
+#   code=$(get_session_code "user@host:123456:abc")
+# -----------------------------------------------------------------------------
+get_session_code() {
+    local session_id="$1"
+
+    if [ -z "$session_id" ]; then
+        return 1
+    fi
+
+    # Generate hash
+    local hash
+    if command -v sha256sum >/dev/null 2>&1; then
+        hash=$(echo -n "$session_id" | sha256sum | cut -d' ' -f1)
+    elif command -v shasum >/dev/null 2>&1; then
+        hash=$(echo -n "$session_id" | shasum -a 256 | cut -d' ' -f1)
+    elif command -v md5sum >/dev/null 2>&1; then
+        hash=$(echo -n "$session_id" | md5sum | cut -d' ' -f1)
+    else
+        echo "UNKNOWN"
+        return 1
+    fi
+
+    # Get word indices from hash
+    local word_count=${#SESSION_WORDS[@]}
+    local idx1=$((16#${hash:0:4} % word_count))
+    local idx2=$((16#${hash:4:4} % word_count))
+    local hex_suffix="${hash:8:2}"
+
+    # Build code
+    local word1="${SESSION_WORDS[$idx1]}"
+    local word2="${SESSION_WORDS[$idx2]}"
+
+    echo "${word1}-${word2}-${hex_suffix^^}"
+}
+
+# -----------------------------------------------------------------------------
+# display_session_banner - Display formatted session identity banner
+#
+# Description:
+#   Shows the hash art and session code in a formatted box.
+#   Used by server-side menus to display identity.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#   1 - Session disabled
+#
+# Outputs:
+#   Formatted banner to stdout
+#
+# Example:
+#   display_session_banner
+# -----------------------------------------------------------------------------
+display_session_banner() {
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" != "true" ]; then
+        return 1
+    fi
+
+    local session_id=$(get_session_id)
+    if [ -z "$session_id" ]; then
+        return 1
+    fi
+
+    local hash_art=$(generate_hash_art "$session_id")
+    local session_code=$(get_session_code "$session_id")
+    local user="${USER:-unknown}"
+    local host="${HOSTNAME:-$(hostname 2>/dev/null || echo 'unknown')}"
+
+    echo -e "${CYAN}┌──────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│${NC}           ${MAGENTA}Session Identity${NC}                      ${CYAN}│${NC}"
+    echo -e "${CYAN}├──────────────────────────────────────────────────┤${NC}"
+
+    # Display hash art with padding
+    while IFS= read -r line; do
+        printf "${CYAN}│${NC}               %s               ${CYAN}│${NC}\n" "$line"
+    done <<< "$hash_art"
+
+    echo -e "${CYAN}├──────────────────────────────────────────────────┤${NC}"
+    printf "${CYAN}│${NC}    ${GREEN}%-15s${NC}   ${YELLOW}%-20s${NC}   ${CYAN}│${NC}\n" "$user@$host" "$session_code"
+    echo -e "${CYAN}└──────────────────────────────────────────────────┘${NC}"
+}
+
+# -----------------------------------------------------------------------------
+# reset_session - Regenerate session identity
+#
+# Description:
+#   Deletes the existing session ID and creates a new one.
+#   Use this if you want a fresh identity or if the session was compromised.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#   1 - Error
+#
+# Side Effects:
+#   - Deletes existing session_id file
+#   - Creates new session_id with fresh timestamp
+#
+# Example:
+#   reset_session
+# -----------------------------------------------------------------------------
+reset_session() {
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" != "true" ]; then
+        echo "Session identity is disabled"
+        return 1
+    fi
+
+    local session_file="$BUILDFLOWZ_SESSION_DIR/session_id"
+
+    # Remove existing session
+    if [ -f "$session_file" ]; then
+        rm -f "$session_file"
+        log INFO "Removed existing session ID"
+    fi
+
+    # Create new session
+    init_session
+
+    local new_id=$(get_session_id)
+    local new_code=$(get_session_code "$new_id")
+
+    echo -e "${GREEN}✅ Session identity reset${NC}"
+    echo -e "${YELLOW}New session code: ${CYAN}$new_code${NC}"
+    log INFO "Session identity reset - new code: $new_code"
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# get_session_info - Get detailed session information
+#
+# Description:
+#   Returns detailed information about the current session including
+#   creation time and user/host info.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#
+# Outputs:
+#   Formatted session info to stdout
+#
+# Example:
+#   get_session_info
+# -----------------------------------------------------------------------------
+get_session_info() {
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" != "true" ]; then
+        echo "Session identity is disabled"
+        return 1
+    fi
+
+    local session_id=$(get_session_id)
+    if [ -z "$session_id" ]; then
+        echo "No session found"
+        return 1
+    fi
+
+    # Parse session ID components
+    local user_host=$(echo "$session_id" | cut -d: -f1)
+    local timestamp=$(echo "$session_id" | cut -d: -f2)
+    local session_code=$(get_session_code "$session_id")
+
+    # Convert timestamp to readable date
+    local created_date
+    if date -d "@$timestamp" &>/dev/null; then
+        created_date=$(date -d "@$timestamp" '+%Y-%m-%d %H:%M:%S')
+    else
+        created_date=$(date -r "$timestamp" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "Unknown")
+    fi
+
+    echo -e "${CYAN}Session Information:${NC}"
+    echo -e "  ${BLUE}User@Host:${NC}    $user_host"
+    echo -e "  ${BLUE}Session Code:${NC} ${YELLOW}$session_code${NC}"
+    echo -e "  ${BLUE}Created:${NC}      $created_date"
+    echo -e "  ${BLUE}File:${NC}         $BUILDFLOWZ_SESSION_DIR/session_id"
+}
+
+# -----------------------------------------------------------------------------
+# get_session_info_for_ssh - Get session info formatted for SSH retrieval
+#
+# Description:
+#   Returns session information in a parseable format for SSH.
+#   Used by client scripts to retrieve server session identity.
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - Success
+#
+# Outputs:
+#   SESSION_ID, HASH_ART, and SESSION_CODE separated by markers
+#
+# Example:
+#   ssh server "source lib.sh && get_session_info_for_ssh"
+# -----------------------------------------------------------------------------
+get_session_info_for_ssh() {
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" != "true" ]; then
+        echo "SESSION_DISABLED"
+        return 1
+    fi
+
+    local session_id=$(get_session_id)
+    if [ -z "$session_id" ]; then
+        echo "SESSION_ERROR"
+        return 1
+    fi
+
+    local hash_art=$(generate_hash_art "$session_id")
+    local session_code=$(get_session_code "$session_id")
+    local user="${USER:-unknown}"
+    local host="${HOSTNAME:-$(hostname 2>/dev/null || echo 'unknown')}"
+
+    # Output in parseable format
+    echo "---SESSION_START---"
+    echo "USER:$user"
+    echo "HOST:$host"
+    echo "CODE:$session_code"
+    echo "---HASH_ART_START---"
+    echo "$hash_art"
+    echo "---HASH_ART_END---"
+    echo "---SESSION_END---"
+}
+
 # GitHub repo operations
 list_github_repos() {
     if ! command -v gh >/dev/null 2>&1; then

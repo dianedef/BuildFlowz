@@ -37,6 +37,53 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}🚇 Dev Tunnel Manager${NC}"
 echo ""
 
+# Retrieve and display server session identity
+echo -e "${BLUE}🔐 Retrieving server session identity...${NC}"
+SESSION_INFO=$(ssh "$REMOTE_HOST" "
+    if [ -f ~/BuildFlowz/lib.sh ]; then
+        source ~/BuildFlowz/lib.sh 2>/dev/null
+        get_session_info_for_ssh 2>/dev/null
+    elif [ -f ~/.buildflowz/lib.sh ]; then
+        source ~/.buildflowz/lib.sh 2>/dev/null
+        get_session_info_for_ssh 2>/dev/null
+    else
+        echo 'SESSION_NOT_FOUND'
+    fi
+" 2>/dev/null)
+
+if echo "$SESSION_INFO" | grep -q "SESSION_START"; then
+    # Parse session info
+    SESSION_USER=$(echo "$SESSION_INFO" | grep "^USER:" | cut -d: -f2)
+    SESSION_HOST=$(echo "$SESSION_INFO" | grep "^HOST:" | cut -d: -f2)
+    SESSION_CODE=$(echo "$SESSION_INFO" | grep "^CODE:" | cut -d: -f2)
+    HASH_ART=$(echo "$SESSION_INFO" | sed -n '/---HASH_ART_START---/,/---HASH_ART_END---/p' | grep -v "^---")
+
+    echo -e "${CYAN}┌──────────────────────────────────────────────────┐${NC}"
+    echo -e "${CYAN}│${NC}        ${YELLOW}🔗 Connected Server Session${NC}              ${CYAN}│${NC}"
+    echo -e "${CYAN}├──────────────────────────────────────────────────┤${NC}"
+
+    # Display hash art with padding
+    while IFS= read -r line; do
+        printf "${CYAN}│${NC}               %s               ${CYAN}│${NC}\n" "$line"
+    done <<< "$HASH_ART"
+
+    echo -e "${CYAN}├──────────────────────────────────────────────────┤${NC}"
+    printf "${CYAN}│${NC}    ${GREEN}%-15s${NC}   ${YELLOW}%-20s${NC}   ${CYAN}│${NC}\n" "$SESSION_USER@$SESSION_HOST" "$SESSION_CODE"
+    echo -e "${CYAN}└──────────────────────────────────────────────────┘${NC}"
+    echo ""
+    echo -e "${GREEN}✓ Verify this pattern matches the server menu${NC}"
+    echo ""
+elif echo "$SESSION_INFO" | grep -q "SESSION_DISABLED"; then
+    echo -e "${YELLOW}⚠ Session identity is disabled on the server${NC}"
+    echo ""
+elif echo "$SESSION_INFO" | grep -q "SESSION_NOT_FOUND"; then
+    echo -e "${YELLOW}⚠ BuildFlowz not found on server (session identity unavailable)${NC}"
+    echo ""
+else
+    echo -e "${YELLOW}⚠ Could not retrieve session identity${NC}"
+    echo ""
+fi
+
 # Vérifier que autossh est installé
 if ! command -v autossh &> /dev/null; then
     echo -e "${RED}✗ autossh n'est pas installé${NC}"

@@ -123,6 +123,16 @@ export BUILDFLOWZ_DANGEROUS_CHARS_REGEX='[\;\&\|\$\`]'
 export BUILDFLOWZ_CADDYFILE="/etc/caddy/Caddyfile"
 
 # ============================================================================
+# SESSION IDENTITY CONFIGURATION
+# ============================================================================
+
+# Session directory for storing identity files
+export BUILDFLOWZ_SESSION_DIR="${BUILDFLOWZ_SESSION_DIR:-$HOME/.buildflowz/session}"
+
+# Enable/disable session identity display
+export BUILDFLOWZ_SESSION_ENABLED="${BUILDFLOWZ_SESSION_ENABLED:-true}"
+
+# ============================================================================
 # ERROR HANDLING CONFIGURATION
 # ============================================================================
 
