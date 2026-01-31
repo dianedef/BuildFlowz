@@ -1,0 +1,16 @@
+# Configuration SSH pour le serveur Hetzner
+# À ajouter dans ~/.ssh/config
+
+Host hetzner
+    HostName 5.75.134.202
+    User root
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    TCPKeepAlive yes
+    
+    # Optimisations pour les tunnels
+    Compression yes
+    ControlMaster auto
+    ControlPath ~/.ssh/control-%r@%h:%p
+    ControlPersist 10m
