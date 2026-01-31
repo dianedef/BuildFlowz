@@ -173,4 +173,4 @@ try {
 Write-Host ""
 Write-Host "${BLUE}💡 Astuce: Pour WSL (meilleure intégration), utilisez:${NC}"
 Write-Host "   ${GREEN}wsl --install${NC}"
-Write-Host "   ${YELLOW}Puis exécutez ./install_local.sh dans WSL${NC}"
+Write-Host "   ${YELLOW}Puis exécutez ./install.sh dans WSL${NC}"

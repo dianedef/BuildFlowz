@@ -59,7 +59,7 @@ BUILDFLOWZ_PM2_CACHE_TTL=5
 
 **Integration:**
 - `lib.sh` - Sources and uses all config values
-- `local-setup/dev-tunnel.sh` - Uses SSH settings
+- `local/dev-tunnel.sh` - Uses SSH settings
 - `find_available_port()` - Uses port range config
 - `list_github_repos()` - Uses GitHub limit
 
@@ -274,7 +274,7 @@ port=$(echo "$config_data" | python3 -c "import json; ..." )
 ```
 config.sh (NEW)              +218 lines  Centralized configuration
 lib.sh                       +180 lines  Logging, caching, parsing
-local-setup/dev-tunnel.sh    +8 lines   Config integration
+local/dev-tunnel.sh          +8 lines   Config integration
 test_priority2.sh (NEW)      +180 lines  Test suite
 CHANGELOG.md                 +100 lines  Documentation
 PRIORITY2_SUMMARY.md (NEW)   This file

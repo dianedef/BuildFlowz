@@ -403,7 +403,7 @@ FINAL_REPORT.md                This file  - Complete overview
 lib.sh                         +900 lines  - All improvements integrated
 menu.sh                        +30 lines   - Integration & validation
 menu_simple_color.sh           +30 lines   - Integration & validation
-local-setup/dev-tunnel.sh      +30 lines   - Config integration
+local/dev-tunnel.sh            +30 lines   - Config integration
 ```
 
 **Total:** +3,800 lines added (improvements + tests + documentation)

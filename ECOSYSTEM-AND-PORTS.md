@@ -149,7 +149,7 @@ pm2 env <id>
 ### 4. Tunnel SSH local (machine locale)
 ```bash
 # Sur votre machine locale
-urls  # ou ./menu_local.sh
+urls  # ou ./local.sh
 
 # Choisir option 1: Démarrer les tunnels
 # Le script détecte automatiquement nouveau-projet avec PORT=3003 !

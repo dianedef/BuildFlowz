@@ -49,7 +49,7 @@ Added automatic prerequisite validation to fail fast with helpful errors:
 - `menu_simple_color.sh` - Runs prerequisite check on startup (line 48)
 
 #### 🔒 SSH Tunnel Security
-Added input validation to `local-setup/dev-tunnel.sh`:
+Added input validation to `local/dev-tunnel.sh`:
 - Validates `REMOTE_HOST` format
 - Validates `REMOTE_USER` format
 - Prevents command injection via malformed hostnames/usernames
@@ -62,7 +62,7 @@ Added input validation to `local-setup/dev-tunnel.sh`:
 - `lib.sh`: +87 lines (new validation functions)
 - `menu.sh`: +8 lines (validation calls)
 - `menu_simple_color.sh`: +8 lines (validation calls)
-- `local-setup/dev-tunnel.sh`: +15 lines (validation)
+- `local/dev-tunnel.sh`: +15 lines (validation)
 
 **Security Improvements:**
 - ✅ Path traversal attacks blocked
@@ -122,7 +122,7 @@ Created `config.sh` with centralized settings:
 
 **Integration:**
 - `lib.sh` - Sources config.sh and uses all values
-- `local-setup/dev-tunnel.sh` - Uses SSH config values
+- `local/dev-tunnel.sh` - Uses SSH config values
 - All scripts now respect centralized configuration
 
 #### 📊 Task #7: Structured Logging (COMPLETED)

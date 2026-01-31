@@ -198,7 +198,7 @@ COMPLETED_IMPROVEMENTS.md      This file  - Final report
 lib.sh                         +267 lines  - Core improvements
 menu.sh                        +18 lines   - Integration
 menu_simple_color.sh           +18 lines   - Integration
-local-setup/dev-tunnel.sh      +23 lines   - Config integration
+local/dev-tunnel.sh            +23 lines   - Config integration
 ```
 
 **Total:** +1,800+ lines of improvements and documentation

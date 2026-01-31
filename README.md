@@ -8,10 +8,10 @@ Menu interactif pour gérer vos environnements de développement avec Flox + PM2
 BuildFlowz/
 ├── lib.sh                  # Bibliothèque partagée (fonctions réutilisables)
 ├── menu_simple_color.sh    # Menu interactif principal
-├── local-setup/            # Configuration machine locale (tunnels SSH)
-│   ├── menu_local.sh       # Menu gestion tunnels
+├── local/                  # Configuration machine locale (tunnels SSH)
+│   ├── local.sh            # Menu gestion tunnels
 │   ├── dev-tunnel.sh       # Script de création tunnels
-│   └── install_local.sh    # Installation automatique
+│   └── install.sh          # Installation automatique
 └── ECOSYSTEM-AND-PORTS.md  # Documentation gestion ports et ecosystem
 ```
 
@@ -61,8 +61,8 @@ cd /root/BuildFlowz
 ### Sur votre machine locale (tunnels SSH)
 ```bash
 # Installation (une fois)
-cd ~/BuildFlowz/local-setup
-./install_local.sh
+cd ~/BuildFlowz/local
+./install.sh
 
 # Utilisation
 urls  # ou tunnel
@@ -86,7 +86,7 @@ BuildFlowz gère automatiquement l'allocation des ports pour éviter les collisi
 ## 📚 Documentation
 
 - **[ECOSYSTEM-AND-PORTS.md](./ECOSYSTEM-AND-PORTS.md)** - Gestion ports et ecosystem PM2
-- **[local-setup/README.md](./local-setup/README.md)** - Configuration tunnels SSH locaux
+- **[local/README.md](./local/README.md)** - Configuration tunnels SSH locaux
 
 ## 💡 Fonctionnalités clés
 

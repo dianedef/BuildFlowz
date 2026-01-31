@@ -112,7 +112,7 @@ Testing validate_repo_name():         7 tests ✓
 lib.sh                    +87 lines  (validation functions)
 menu.sh                   +10 lines  (validation calls)
 menu_simple_color.sh      +10 lines  (validation calls)
-local-setup/dev-tunnel.sh +15 lines  (SSH validation)
+local/dev-tunnel.sh       +15 lines  (SSH validation)
 ```
 
 ### Files Created

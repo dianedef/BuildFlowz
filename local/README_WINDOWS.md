@@ -32,8 +32,8 @@ Windows offre **3 options** pour utiliser BuildFlowz localement:
    ```bash
    cd /mnt/c/Users/VotreNom/Documents  # Ou votre dossier préféré
    git clone https://github.com/votre-org/BuildFlowz.git
-   cd BuildFlowz/local-setup
-   ./install_local.sh
+   cd BuildFlowz/local
+   ./install.sh
    ```
 
 4. **Utiliser les tunnels:**
@@ -66,7 +66,7 @@ Windows offre **3 options** pour utiliser BuildFlowz localement:
 
 2. **Exécuter le script d'installation:**
    ```powershell
-   cd local-setup
+   cd local
    .\install_local.ps1
    ```
 

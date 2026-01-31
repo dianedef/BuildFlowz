@@ -30,10 +30,10 @@ Voir [README_WINDOWS.md](./README_WINDOWS.md) pour les 3 options disponibles:
 ```bash
 # Cloner le repo
 git clone <votre-repo> ~/BuildFlowz
-cd ~/BuildFlowz/local-setup
+cd ~/BuildFlowz/local
 
 # Lancer l'installation
-./install_local.sh
+./install.sh
 
 # Recharger le shell
 source ~/.bashrc  # ou source ~/.zshrc
@@ -43,7 +43,7 @@ source ~/.bashrc  # ou source ~/.zshrc
 ```powershell
 # Cloner le repo
 git clone <votre-repo> $env:USERPROFILE\BuildFlowz
-cd $env:USERPROFILE\BuildFlowz\local-setup
+cd $env:USERPROFILE\BuildFlowz\local
 
 # Lancer l'installation
 .\install_local.ps1
@@ -66,7 +66,7 @@ Si vous préférez configurer manuellement :
 1. **Configuration SSH** - Copier `ssh-config` dans `~/.ssh/config`
 2. **Alias** - Ajouter dans `~/.bashrc` ou `~/.zshrc` :
    ```bash
-   alias urls='~/BuildFlowz/local-setup/dev-tunnel.sh'
+   alias urls='~/BuildFlowz/local/dev-tunnel.sh'
    ```
 
 ## 🚀 Utilisation

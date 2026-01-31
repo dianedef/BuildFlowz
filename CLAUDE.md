@@ -148,9 +148,9 @@ bash -n menu_simple_color.sh
 ./menu.sh               # Gum-based (requires gum)
 
 # Local machine (SSH tunnels)
-cd local-setup
+cd local
 ./dev-tunnel.sh         # Auto-creates tunnels for all PM2 apps
-./menu_local.sh         # Interactive tunnel manager
+./local.sh              # Interactive tunnel manager
 ```
 
 ### Working with Environments
@@ -414,10 +414,10 @@ BuildFlowz/
 ├── menu.sh                  # Gum-based menu
 ├── menu_simple_color.sh     # Text-based menu
 ├── install.sh               # Server installation
-├── local-setup/             # Local machine scripts
+├── local/                   # Local machine scripts
 │   ├── dev-tunnel.sh        # Auto SSH tunnels
-│   ├── menu_local.sh        # Tunnel manager menu
-│   ├── install_local.sh     # Local setup
+│   ├── local.sh             # Tunnel manager menu
+│   ├── install.sh           # Local setup
 │   └── ssh-config           # SSH config template
 ├── injectors/
 │   └── web-inspector.js     # Browser inspector (377 lines)
@@ -434,4 +434,4 @@ BuildFlowz/
 - **CHANGELOG.md** - Detailed change history
 - **ECOSYSTEM-AND-PORTS.md** - Port management deep dive
 - **PRIORITY{1,2,3}_SUMMARY.md** - Per-priority implementation details
-- **local-setup/README.md** - SSH tunnel setup guide
+- **local/README.md** - SSH tunnel setup guide

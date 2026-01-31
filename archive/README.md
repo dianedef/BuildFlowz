@@ -13,4 +13,4 @@ Ces documents sont conservés pour référence historique mais ne reflètent plu
 Voir à la racine de BuildFlowz :
 - **README.md** - Documentation principale
 - **ECOSYSTEM-AND-PORTS.md** - Gestion ports et ecosystem PM2
-- **local-setup/README.md** - Configuration tunnels SSH
+- **local/README.md** - Configuration tunnels SSH

@@ -1,5 +1,5 @@
 #!/bin/bash
-# install_local.sh - Installation automatique pour machine locale
+# install.sh - Installation automatique pour machine locale
 
 set -e
 
@@ -116,8 +116,8 @@ echo -e "${BLUE}3. Ajout des alias shell...${NC}"
 
 ALIAS_BLOCK="
 # BuildFlowz - Alias pour tunnels SSH
-alias urls='$SCRIPT_DIR/menu_local.sh'
-alias tunnel='$SCRIPT_DIR/menu_local.sh'
+alias urls='$SCRIPT_DIR/local.sh'
+alias tunnel='$SCRIPT_DIR/local.sh'
 "
 
 if grep -q "# BuildFlowz - Alias pour tunnels SSH" "$SHELL_RC" 2>/dev/null; then
@@ -131,7 +131,7 @@ fi
 echo ""
 echo -e "${BLUE}4. Configuration des permissions...${NC}"
 chmod +x "$SCRIPT_DIR/dev-tunnel.sh"
-chmod +x "$SCRIPT_DIR/menu_local.sh"
+chmod +x "$SCRIPT_DIR/local.sh"
 echo -e "${GREEN}   ✓ Scripts exécutables${NC}"
 
 # 5. Résumé
