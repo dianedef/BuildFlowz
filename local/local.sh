@@ -222,12 +222,10 @@ print_header() {
     echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║${NC}              ${YELLOW}BuildFlowz - Local${NC}              ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}           ${BLUE}SSH Tunnel Manager${NC}              ${CYAN}║${NC}"
-    echo -e "${CYAN}╠══════════════════════════════════════════════════╣${NC}"
-    echo -e "${CYAN}║${NC}  ${BLUE}Connexion:${NC} ${GREEN}$REMOTE_HOST${NC}$(printf '%*s' $((32 - ${#REMOTE_HOST})) '')${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Display server session identity
+    # Display server session identity (includes user@host info)
     display_server_session_banner
     echo ""
 }
