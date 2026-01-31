@@ -57,9 +57,8 @@ get_saved_connections() {
 # Menu to select/add connection
 select_connection() {
     echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-    echo -e "          ${YELLOW}Gestion des connexions${NC}"
+    echo -e "              ${YELLOW}Gestion des connexions${NC}"
     echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-    echo ""
     echo -e "${BLUE}Connexion actuelle:${NC} ${GREEN}$REMOTE_HOST${NC}"
     echo ""
 
@@ -198,18 +197,15 @@ display_server_session_banner() {
         local session_code=$(echo "$session_info" | grep "^CODE:" | cut -d: -f2)
         local hash_art=$(echo "$session_info" | sed -n '/---HASH_ART_START---/,/---HASH_ART_END---/p' | grep -v "^---")
 
+        echo -e "             ${MAGENTA}Server Session Identity${NC}"
         echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-        echo -e "${MAGENTA}  Server Session Identity${NC}"
-        echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-        echo ""
 
         # Display hash art
         while IFS= read -r line; do
             echo -e "              ${BLUE}$line${NC}"
         done <<< "$hash_art"
 
-        echo ""
-        echo -e "  ${GREEN}$session_user@$session_host${NC}    ${YELLOW}$session_code${NC}"
+        echo -e "        ${GREEN}$session_user@$session_host${NC}    ${YELLOW}$session_code${NC}"
         echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
     elif echo "$session_info" | grep -q "SESSION_NOT_FOUND"; then
         echo -e "${YELLOW}⚠ Session identity unavailable (BuildFlowz not found on server)${NC}"
@@ -221,14 +217,12 @@ display_server_session_banner() {
 # Fonction d'affichage avec couleurs
 print_header() {
     echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-    echo -e "            ${YELLOW}BuildFlowz - Local${NC}"
-    echo -e "           ${BLUE}SSH Tunnel Manager${NC}"
+    echo -e "                ${YELLOW}BuildFlowz - Local${NC}"
+    echo -e "                ${BLUE}SSH Tunnel Manager${NC}"
     echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-    echo ""
 
     # Display server session identity (includes user@host info)
     display_server_session_banner
-    echo ""
 }
 
 # Fonction d'affichage du menu

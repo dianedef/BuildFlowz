@@ -1030,18 +1030,15 @@ display_session_banner() {
     local user="${USER:-unknown}"
     local host="${HOSTNAME:-$(hostname 2>/dev/null || echo 'unknown')}"
 
+    echo -e "                 ${MAGENTA}Session Identity${NC}"
     echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-    echo -e "${MAGENTA}  Session Identity${NC}"
-    echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-    echo ""
 
     # Display hash art (centered visually)
     while IFS= read -r line; do
         echo -e "              ${BLUE}$line${NC}"
     done <<< "$hash_art"
 
-    echo ""
-    echo -e "  ${GREEN}$user@$host${NC}    ${YELLOW}$session_code${NC}"
+    echo -e "        ${GREEN}$user@$host${NC}    ${YELLOW}$session_code${NC}"
     echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
 }
 

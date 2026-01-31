@@ -61,18 +61,15 @@ if echo "$SESSION_INFO" | grep -q "SESSION_START"; then
     SESSION_CODE=$(echo "$SESSION_INFO" | grep "^CODE:" | cut -d: -f2)
     HASH_ART=$(echo "$SESSION_INFO" | sed -n '/---HASH_ART_START---/,/---HASH_ART_END---/p' | grep -v "^---")
 
+    echo -e "             ${MAGENTA}Server Session Identity${NC}"
     echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-    echo -e "${MAGENTA}  Server Session Identity${NC}"
-    echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-    echo ""
 
     # Display hash art
     while IFS= read -r line; do
         echo -e "              ${BLUE}$line${NC}"
     done <<< "$HASH_ART"
 
-    echo ""
-    echo -e "  ${GREEN}$SESSION_USER@$SESSION_HOST${NC}    ${YELLOW}$SESSION_CODE${NC}"
+    echo -e "        ${GREEN}$SESSION_USER@$SESSION_HOST${NC}    ${YELLOW}$SESSION_CODE${NC}"
     echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
     echo ""
     echo -e "${GREEN}✓ Verify this pattern matches the server menu${NC}"

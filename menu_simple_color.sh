@@ -10,10 +10,9 @@ source "$SCRIPT_DIR/lib.sh"
 # Fonction d'affichage avec couleurs
 print_header() {
     echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-    echo -e "            ${YELLOW}BuildFlowz DevServer${NC}"
-    echo -e "         ${BLUE}Development Environment${NC}"
+    echo -e "               ${YELLOW}BuildFlowz DevServer${NC}"
+    echo -e "             ${BLUE}Development Environment${NC}"
     echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-    echo ""
 
     # Display session identity banner if enabled
     if [ "$BUILDFLOWZ_SESSION_ENABLED" = "true" ]; then
@@ -87,9 +86,8 @@ show_advanced_menu() {
     while true; do
         clear
         echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-        echo -e "              ${YELLOW}Advanced Options${NC}"
+        echo -e "                 ${YELLOW}Advanced Options${NC}"
         echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
-        echo ""
 
         echo -e "${GREEN}Choose an option:${NC}"
         echo ""
