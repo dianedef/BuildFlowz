@@ -56,9 +56,9 @@ get_saved_connections() {
 
 # Menu to select/add connection
 select_connection() {
-    echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}          ${YELLOW}🔌 Gestion des connexions${NC}            ${CYAN}║${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+    echo -e "          ${YELLOW}Gestion des connexions${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
     echo ""
     echo -e "${BLUE}Connexion actuelle:${NC} ${GREEN}$REMOTE_HOST${NC}"
     echo ""
@@ -220,10 +220,10 @@ display_server_session_banner() {
 
 # Fonction d'affichage avec couleurs
 print_header() {
-    echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}              ${YELLOW}BuildFlowz - Local${NC}              ${CYAN}║${NC}"
-    echo -e "${CYAN}║${NC}           ${BLUE}SSH Tunnel Manager${NC}              ${CYAN}║${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+    echo -e "            ${YELLOW}BuildFlowz - Local${NC}"
+    echo -e "           ${BLUE}SSH Tunnel Manager${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
     echo ""
 
     # Display server session identity (includes user@host info)
