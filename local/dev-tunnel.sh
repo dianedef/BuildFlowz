@@ -9,21 +9,24 @@ if [ -f "$SCRIPT_DIR/../config.sh" ]; then
     source "$SCRIPT_DIR/../config.sh"
 fi
 
-REMOTE_USER="${REMOTE_USER:-$BUILDFLOWZ_SSH_REMOTE_USER}"
-REMOTE_HOST="${REMOTE_HOST:-$BUILDFLOWZ_SSH_REMOTE_HOST}"
-SSH_CONFIG="$HOME/.ssh/config"
+# Configuration directory
+CONFIG_DIR="$HOME/.buildflowz"
+CURRENT_CONNECTION_FILE="$CONFIG_DIR/current_connection"
 
-# Validate remote host name
-if [[ ! "$REMOTE_HOST" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    echo -e "${RED}✗ Invalid REMOTE_HOST: $REMOTE_HOST${NC}"
-    echo -e "${YELLOW}  Host name can only contain letters, numbers, dash, underscore, dot${NC}"
-    exit 1
+# Load saved connection or use default
+if [ -f "$CURRENT_CONNECTION_FILE" ]; then
+    REMOTE_HOST=$(cat "$CURRENT_CONNECTION_FILE")
+else
+    REMOTE_HOST="${REMOTE_HOST:-$BUILDFLOWZ_SSH_REMOTE_HOST}"
+    REMOTE_HOST="${REMOTE_HOST:-hetzner}"
 fi
 
-# Validate remote user name
-if [[ ! "$REMOTE_USER" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    echo -e "${RED}✗ Invalid REMOTE_USER: $REMOTE_USER${NC}"
-    echo -e "${YELLOW}  User name can only contain letters, numbers, dash, underscore, dot${NC}"
+SSH_CONFIG="$HOME/.ssh/config"
+
+# Validate remote host (can include user@host format)
+if [[ ! "$REMOTE_HOST" =~ ^[a-zA-Z0-9._@-]+$ ]]; then
+    echo -e "${RED}✗ Invalid REMOTE_HOST: $REMOTE_HOST${NC}"
+    echo -e "${YELLOW}  Format: user@host or ssh-alias${NC}"
     exit 1
 fi
 
@@ -91,12 +94,18 @@ if ! command -v autossh &> /dev/null; then
     exit 1
 fi
 
-# Vérifier la configuration SSH
-if ! grep -q "Host $REMOTE_HOST" "$SSH_CONFIG" 2>/dev/null; then
-    echo -e "${YELLOW}⚠ Configuration SSH manquante pour '$REMOTE_HOST'${NC}"
-    echo -e "${YELLOW}  Ajoutez la configuration dans $SSH_CONFIG (voir ssh-config)${NC}"
-    exit 1
+# Vérifier la connexion SSH (test rapide)
+# On accepte user@host ou alias SSH
+SSH_HOST_ONLY="${REMOTE_HOST#*@}"  # Remove user@ if present
+if [[ "$REMOTE_HOST" != *"@"* ]]; then
+    # C'est un alias, vérifier dans la config SSH
+    if ! grep -q "Host $REMOTE_HOST" "$SSH_CONFIG" 2>/dev/null; then
+        echo -e "${YELLOW}⚠ Configuration SSH manquante pour '$REMOTE_HOST'${NC}"
+        echo -e "${YELLOW}  Ajoutez la configuration dans $SSH_CONFIG ou utilisez user@host${NC}"
+    fi
 fi
+echo -e "${BLUE}🔌 Connexion: ${GREEN}$REMOTE_HOST${NC}"
+echo ""
 
 # Récupérer les ports actifs depuis PM2 sur le serveur distant
 echo -e "${BLUE}📡 Récupération des ports actifs depuis PM2...${NC}"

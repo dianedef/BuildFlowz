@@ -14,7 +14,146 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
-REMOTE_HOST="hetzner"
+# Configuration file for saved connections
+CONFIG_DIR="$HOME/.buildflowz"
+CONNECTIONS_FILE="$CONFIG_DIR/connections.conf"
+CURRENT_CONNECTION_FILE="$CONFIG_DIR/current_connection"
+
+# Initialize config directory
+mkdir -p "$CONFIG_DIR" 2>/dev/null
+
+# Load or set default connection
+load_current_connection() {
+    if [ -f "$CURRENT_CONNECTION_FILE" ]; then
+        REMOTE_HOST=$(cat "$CURRENT_CONNECTION_FILE")
+    else
+        REMOTE_HOST="hetzner"
+    fi
+}
+
+# Save current connection
+save_current_connection() {
+    echo "$REMOTE_HOST" > "$CURRENT_CONNECTION_FILE"
+}
+
+# Add connection to saved list
+add_saved_connection() {
+    local connection="$1"
+    # Create file if not exists
+    touch "$CONNECTIONS_FILE"
+    # Add if not already present
+    if ! grep -q "^${connection}$" "$CONNECTIONS_FILE" 2>/dev/null; then
+        echo "$connection" >> "$CONNECTIONS_FILE"
+    fi
+}
+
+# Get saved connections
+get_saved_connections() {
+    if [ -f "$CONNECTIONS_FILE" ]; then
+        cat "$CONNECTIONS_FILE" | sort -u
+    fi
+}
+
+# Menu to select/add connection
+select_connection() {
+    echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}          ${YELLOW}🔌 Gestion des connexions${NC}            ${CYAN}║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${BLUE}Connexion actuelle:${NC} ${GREEN}$REMOTE_HOST${NC}"
+    echo ""
+
+    # Get saved connections
+    local saved=$(get_saved_connections)
+    local options=()
+    local i=1
+
+    echo -e "${BLUE}Connexions enregistrées:${NC}"
+    echo ""
+
+    if [ -n "$saved" ]; then
+        while IFS= read -r conn; do
+            if [ "$conn" = "$REMOTE_HOST" ]; then
+                echo -e "  ${CYAN}$i)${NC} $conn ${GREEN}(actuel)${NC}"
+            else
+                echo -e "  ${CYAN}$i)${NC} $conn"
+            fi
+            options+=("$conn")
+            ((i++))
+        done <<< "$saved"
+    else
+        echo -e "  ${YELLOW}Aucune connexion enregistrée${NC}"
+    fi
+
+    echo ""
+    echo -e "  ${CYAN}n)${NC} ➕ Nouvelle connexion"
+    echo -e "  ${CYAN}0)${NC} ← Retour"
+    echo ""
+    echo -e "${YELLOW}Votre choix:${NC} \c"
+    read -r choice
+
+    case "$choice" in
+        0)
+            return 0
+            ;;
+        n|N)
+            echo ""
+            echo -e "${BLUE}Format: user@host ou alias SSH${NC}"
+            echo -e "${YELLOW}Exemple: claude@hetzner, root@192.168.1.10, myserver${NC}"
+            echo ""
+            echo -e "${YELLOW}Nouvelle connexion:${NC} \c"
+            read -r new_conn
+
+            if [ -n "$new_conn" ]; then
+                # Test connection
+                echo ""
+                echo -e "${BLUE}🔍 Test de connexion...${NC}"
+                if ssh -o ConnectTimeout=5 -o BatchMode=yes "$new_conn" "echo ok" &>/dev/null; then
+                    echo -e "${GREEN}✓ Connexion réussie!${NC}"
+                    REMOTE_HOST="$new_conn"
+                    save_current_connection
+                    add_saved_connection "$new_conn"
+                    # Invalidate session cache
+                    CACHED_SESSION_INFO=""
+                    CACHED_SESSION_TIME=0
+                else
+                    echo -e "${RED}✗ Échec de connexion à $new_conn${NC}"
+                    echo -e "${YELLOW}Vérifiez l'adresse et votre configuration SSH${NC}"
+                    pause
+                fi
+            fi
+            ;;
+        [1-9]|[1-9][0-9])
+            local idx=$((choice - 1))
+            if [ $idx -lt ${#options[@]} ]; then
+                local selected="${options[$idx]}"
+                echo ""
+                echo -e "${BLUE}🔍 Test de connexion à $selected...${NC}"
+                if ssh -o ConnectTimeout=5 -o BatchMode=yes "$selected" "echo ok" &>/dev/null; then
+                    echo -e "${GREEN}✓ Connexion réussie!${NC}"
+                    REMOTE_HOST="$selected"
+                    save_current_connection
+                    # Invalidate session cache
+                    CACHED_SESSION_INFO=""
+                    CACHED_SESSION_TIME=0
+                else
+                    echo -e "${RED}✗ Échec de connexion${NC}"
+                    pause
+                fi
+            else
+                echo -e "${RED}❌ Choix invalide${NC}"
+                pause
+            fi
+            ;;
+        *)
+            echo -e "${RED}❌ Choix invalide${NC}"
+            pause
+            ;;
+    esac
+}
+
+# Load connection at startup
+load_current_connection
 
 # Cached session info (to avoid repeated SSH calls)
 CACHED_SESSION_INFO=""
@@ -83,6 +222,8 @@ print_header() {
     echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║${NC}              ${YELLOW}BuildFlowz - Local${NC}              ${CYAN}║${NC}"
     echo -e "${CYAN}║${NC}           ${BLUE}SSH Tunnel Manager${NC}              ${CYAN}║${NC}"
+    echo -e "${CYAN}╠══════════════════════════════════════════════════╣${NC}"
+    echo -e "${CYAN}║${NC}  ${BLUE}Connexion:${NC} ${GREEN}$REMOTE_HOST${NC}$(printf '%*s' $((32 - ${#REMOTE_HOST})) '')${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -100,7 +241,9 @@ show_menu() {
     echo -e "  ${CYAN}3)${NC} 🛑 Arrêter les tunnels"
     echo -e "  ${CYAN}4)${NC} 📊 Statut des tunnels"
     echo -e "  ${CYAN}5)${NC} 🔄 Redémarrer les tunnels"
-    echo -e "  ${CYAN}6)${NC} ❌ Quitter"
+    echo ""
+    echo -e "  ${CYAN}7)${NC} 🔌 Changer de connexion"
+    echo -e "  ${CYAN}0)${NC} ❌ Quitter"
     echo ""
 }
 
@@ -339,7 +482,10 @@ main() {
                 start_tunnels
                 pause
                 ;;
-            6)
+            7)
+                select_connection
+                ;;
+            0|6)
                 echo -e "${GREEN}👋 Au revoir !${NC}"
                 exit 0
                 ;;
