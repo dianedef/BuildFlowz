@@ -1745,7 +1745,70 @@ init_web_inspector() {
             echo "Warning: No layout with </body> found for Astro project"
         fi
     else
-        echo "Warning: Could not find injection target (no index.html or Astro layout)"
+        # Check for Next.js project (direct or monorepo)
+        local is_nextjs=false
+        local layout_file=""
+        local public_dir="public"
+
+        # Direct Next.js detection (next.config.*, next-env.d.ts, or "next" in package.json)
+        if [ -f "next.config.ts" ] || [ -f "next.config.js" ] || [ -f "next.config.mjs" ] || [ -f "next-env.d.ts" ] || ([ -f "package.json" ] && grep -q '"next"' package.json); then
+            is_nextjs=true
+            for candidate in "app/layout.tsx" "app/layout.jsx" "src/app/layout.tsx" "src/app/layout.jsx"; do
+                if [ -f "$candidate" ]; then
+                    layout_file="$candidate"
+                    break
+                fi
+            done
+        fi
+
+        # Monorepo detection (check apps/* and packages/* for Next.js indicators)
+        if [ "$is_nextjs" = false ]; then
+            for app_dir in apps/* packages/*; do
+                [ -d "$app_dir" ] || continue
+                # Check for Next.js indicators in this app
+                if [ -f "$app_dir/next.config.ts" ] || [ -f "$app_dir/next.config.js" ] || [ -f "$app_dir/next.config.mjs" ] || [ -f "$app_dir/next-env.d.ts" ] || ([ -f "$app_dir/package.json" ] && grep -q '"next"' "$app_dir/package.json"); then
+                    is_nextjs=true
+                    # Find layout in this app directory
+                    for candidate in "$app_dir/app/layout.tsx" "$app_dir/app/layout.jsx" "$app_dir/src/app/layout.tsx" "$app_dir/src/app/layout.jsx"; do
+                        if [ -f "$candidate" ]; then
+                            layout_file="$candidate"
+                            # For monorepos, also copy to the app's public dir
+                            if [ -d "$app_dir/public" ]; then
+                                cp "$script_path" "$app_dir/public/buildflowz-inspector.js"
+                                echo "Copied web inspector to $app_dir/public/buildflowz-inspector.js"
+                            fi
+                            break 2
+                        fi
+                    done
+                fi
+            done
+        fi
+
+        if [ "$is_nextjs" = true ]; then
+            if [ -z "$layout_file" ]; then
+                echo "Warning: Next.js project detected but no app/layout found"
+            elif grep -q "buildflowz-inspector" "$layout_file"; then
+                echo "Script already present in $layout_file"
+            else
+                # Add Script import if not present
+                if ! grep -q "from ['\"]next/script['\"]" "$layout_file"; then
+                    # Add import after the first import line
+                    sed -i '0,/^import /s//import Script from "next\/script";\n&/' "$layout_file"
+                    echo "Added Script import to $layout_file"
+                fi
+
+                # Add Script component before </body>
+                local nextjs_script='<Script src="/buildflowz-inspector.js" strategy="afterInteractive" id="buildflowz-inspector" />'
+                if grep -q "</body>" "$layout_file"; then
+                    sed -i "s|</body>|        ${nextjs_script}\n      </body>|" "$layout_file"
+                    echo "Injected Script component into $layout_file"
+                else
+                    echo "Warning: No </body> tag found in $layout_file"
+                fi
+            fi
+        else
+            echo "Warning: Could not find injection target (no index.html, Astro layout, or Next.js layout)"
+        fi
     fi
 
     echo "Web inspector configured"
