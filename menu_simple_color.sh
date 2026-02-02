@@ -188,24 +188,26 @@ show_help() {
 
         echo ""
         echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
-        echo -e "  ${CYAN}←${NC} Previous    ${CYAN}→${NC} Next    ${CYAN}0${NC} Back to Menu"
+        echo -e "  ${CYAN}p${NC} Previous   ${CYAN}Enter/n${NC} Next   ${CYAN}1-4${NC} Jump   ${CYAN}0${NC} Back"
         echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
         echo ""
-        echo -e "${YELLOW}Your choice:${NC} \c"
+        echo -e "${YELLOW}[$page/$total_pages]:${NC} \c"
         read -r help_choice
 
         case $help_choice in
-            ""|"n"|"N"|"→"|">")
+            ""|n|N)
+                # Enter or n = next page
                 if [ $page -lt $total_pages ]; then
                     page=$((page + 1))
                 fi
                 ;;
-            "p"|"P"|"←"|"<")
+            p|P|b|B)
+                # p or b = previous page
                 if [ $page -gt 1 ]; then
                     page=$((page - 1))
                 fi
                 ;;
-            0)
+            0|q|Q)
                 return
                 ;;
             [1-4])
