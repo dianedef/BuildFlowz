@@ -39,8 +39,180 @@ show_menu() {
     echo -e "${BLUE}⚙️  ADVANCED${NC}"
     echo -e "  ${CYAN}7)${NC} More Options - Logs, Navigate, Settings..."
     echo ""
+    echo -e "${BLUE}📖 DOCUMENTATION${NC}"
+    echo -e "  ${CYAN}8)${NC} Help - How BuildFlowz works"
+    echo ""
     echo -e "  ${CYAN}0)${NC} Exit"
     echo ""
+}
+
+# Help documentation
+show_help() {
+    local page=1
+    local total_pages=4
+
+    while true; do
+        clear
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo -e "              ${YELLOW}BuildFlowz Help${NC} (Page $page/$total_pages)"
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo ""
+
+        case $page in
+            1)
+                # Quickstart guide
+                echo -e "${GREEN}🚀 QUICKSTART GUIDE${NC}"
+                echo ""
+                echo -e "${YELLOW}First time? Follow these steps:${NC}"
+                echo ""
+                echo -e "  ${CYAN}Step 1:${NC} ${GREEN}Have a project ready${NC}"
+                echo -e "         Place your project in ${YELLOW}/root/${NC} directory"
+                echo -e "         (or clone from GitHub using option 2 → 3)"
+                echo ""
+                echo -e "  ${CYAN}Step 2:${NC} ${GREEN}Start your project${NC}"
+                echo -e "         From main menu, press ${YELLOW}2${NC} (Start/Deploy)"
+                echo -e "         Then press ${YELLOW}1${NC} (Auto-detect)"
+                echo -e "         Select your project from the list"
+                echo ""
+                echo -e "  ${CYAN}Step 3:${NC} ${GREEN}Access your app${NC}"
+                echo -e "         Your app runs on ${YELLOW}http://localhost:<port>${NC}"
+                echo -e "         Check the Dashboard (${YELLOW}1${NC}) to see the port"
+                echo ""
+                echo -e "  ${CYAN}Step 4:${NC} ${GREEN}Publish to web (optional)${NC}"
+                echo -e "         Press ${YELLOW}6${NC} to configure HTTPS with DuckDNS"
+                echo ""
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC} ${YELLOW}Quick Reference:${NC}                                        ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}   ${CYAN}1${NC} Dashboard    ${CYAN}2${NC} Start    ${CYAN}3${NC} Restart   ${CYAN}4${NC} Stop       ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}   ${CYAN}5${NC} Remove       ${CYAN}6${NC} Publish  ${CYAN}7${NC} Advanced  ${CYAN}8${NC} Help       ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                ;;
+            2)
+                # Architecture diagram
+                echo -e "${GREEN}📐 HOW BUILDFLOWZ WORKS${NC}"
+                echo ""
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  You select a project from the menu                      ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  BuildFlowz checks: does project have ${CYAN}.flox${NC} directory?  ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}✓ Yes${NC} → use existing    ${YELLOW}✗ No${NC} → create & configure     ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  Auto-detect project type & dev command:                 ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  • package.json → ${CYAN}npm/yarn/pnpm dev${NC}                     ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  • requirements.txt → ${CYAN}./venv/bin/python main.py${NC}        ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  • Cargo.toml → ${CYAN}cargo run${NC}                              ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  Create ${CYAN}ecosystem.config.cjs${NC} for PM2:                   ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${YELLOW}script:${NC} bash -c \"flox activate -- <dev command>\"       ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  PM2 manages the process:                                ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}• Auto-restart on crash${NC}                                ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}• Logs captured${NC}                                        ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}• Port management${NC}                                      ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                ;;
+            3)
+                # Supported technologies
+                echo -e "${GREEN}🛠️  SUPPORTED TECHNOLOGIES${NC}"
+                echo ""
+                echo -e "${BLUE}┌──────────────────┬────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC} ${YELLOW}Language/Stack${NC}   ${BLUE}│${NC} ${YELLOW}Detection & Commands${NC}               ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Node.js${NC}          ${BLUE}│${NC} package.json                       ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → npm/yarn/pnpm install & dev      ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Python${NC}           ${BLUE}│${NC} requirements.txt / pyproject.toml  ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → venv + pip install + python      ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Rust${NC}             ${BLUE}│${NC} Cargo.toml                         ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → cargo run                        ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Go${NC}               ${BLUE}│${NC} go.mod                             ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → go run .                         ${BLUE}│${NC}"
+                echo -e "${BLUE}└──────────────────┴────────────────────────────────────┘${NC}"
+                echo ""
+                echo -e "${GREEN}📦 FRAMEWORKS AUTO-DETECTED${NC}"
+                echo ""
+                echo -e "  ${CYAN}•${NC} Next.js     → ${YELLOW}npm dev -p \$PORT${NC}"
+                echo -e "  ${CYAN}•${NC} Astro       → ${YELLOW}npm dev -- --port \$PORT --host${NC}"
+                echo -e "  ${CYAN}•${NC} Vite        → ${YELLOW}npm dev -- --port \$PORT --host${NC}"
+                echo -e "  ${CYAN}•${NC} Nuxt        → ${YELLOW}npm dev --port \$PORT${NC}"
+                echo -e "  ${CYAN}•${NC} Django      → ${YELLOW}python manage.py runserver 0.0.0.0:\$PORT${NC}"
+                echo -e "  ${CYAN}•${NC} Flask/FastAPI → ${YELLOW}python app.py${NC} or ${YELLOW}python main.py${NC}"
+                echo ""
+                echo -e "${GREEN}🔧 ENVIRONMENT ISOLATION${NC}"
+                echo ""
+                echo -e "  ${CYAN}Flox${NC} provides reproducible, isolated environments"
+                echo -e "  Each project gets its own dependencies via Nix"
+                ;;
+            4)
+                # Web inspector & Eruda
+                echo -e "${GREEN}🔍 WEB INSPECTOR (Visual Selection)${NC}"
+                echo ""
+                echo -e "  Inject a visual element selector into your web app:"
+                echo ""
+                echo -e "  ${CYAN}•${NC} Toggle via ${YELLOW}Advanced → Toggle Web Inspector${NC}"
+                echo -e "  ${CYAN}•${NC} Shows numbered buttons on every ${YELLOW}<div>${NC} element"
+                echo -e "  ${CYAN}•${NC} ${GREEN}Click${NC} → Copy XPath to clipboard"
+                echo -e "  ${CYAN}•${NC} ${GREEN}Long-press${NC} → Screenshot menu:"
+                echo -e "      - Copy to clipboard"
+                echo -e "      - Download PNG"
+                echo -e "      - Upload & copy URL (imgbb)"
+                echo ""
+                echo -e "${GREEN}🖥️  ERUDA CONSOLE${NC}"
+                echo ""
+                echo -e "  Mobile-friendly developer console injected automatically:"
+                echo ""
+                echo -e "  ${CYAN}•${NC} View console.log output"
+                echo -e "  ${CYAN}•${NC} Inspect network requests"
+                echo -e "  ${CYAN}•${NC} View DOM elements"
+                echo -e "  ${CYAN}•${NC} Debug JavaScript errors"
+                echo -e "  ${CYAN}•${NC} Check storage (localStorage, cookies)"
+                echo ""
+                echo -e "${YELLOW}💡 Both tools are injected via:${NC}"
+                echo -e "   ${CYAN}injectors/web-inspector.js${NC}"
+                ;;
+        esac
+
+        echo ""
+        echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
+        echo -e "  ${CYAN}←${NC} Previous    ${CYAN}→${NC} Next    ${CYAN}0${NC} Back to Menu"
+        echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
+        echo ""
+        echo -e "${YELLOW}Your choice:${NC} \c"
+        read -r help_choice
+
+        case $help_choice in
+            ""|"n"|"N"|"→"|">")
+                if [ $page -lt $total_pages ]; then
+                    page=$((page + 1))
+                fi
+                ;;
+            "p"|"P"|"←"|"<")
+                if [ $page -gt 1 ]; then
+                    page=$((page - 1))
+                fi
+                ;;
+            0)
+                return
+                ;;
+            [1-4])
+                page=$help_choice
+                ;;
+        esac
+    done
 }
 
 # Fonction de sélection d'environnement
@@ -541,6 +713,11 @@ EOF
             7)
                 # Advanced Options Submenu
                 show_advanced_menu
+                ;;
+
+            8)
+                # Help documentation
+                show_help
                 ;;
 
             0|10)

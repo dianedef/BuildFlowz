@@ -1332,6 +1332,23 @@ init_flox_env() {
             flox activate -- npm install 2>&1 | grep -v "npm WARN" || true
         fi
         echo -e "${GREEN}✅ Dépendances installées${NC}"
+    elif [ "$lang" = "python" ]; then
+        echo -e "${BLUE}🐍 Configuration de l'environnement Python...${NC}"
+        cd "$project_dir"
+        # Create venv if it doesn't exist
+        if [ ! -d "venv" ]; then
+            echo -e "${BLUE}   Creating Python venv...${NC}"
+            flox activate -- python -m venv venv 2>&1 || true
+        fi
+        # Install requirements if they exist
+        if [ -f "requirements.txt" ]; then
+            echo -e "${BLUE}   Installing requirements.txt...${NC}"
+            flox activate -- ./venv/bin/pip install -r requirements.txt -q 2>&1 || true
+        elif [ -f "pyproject.toml" ]; then
+            echo -e "${BLUE}   Installing from pyproject.toml...${NC}"
+            flox activate -- ./venv/bin/pip install -e . -q 2>&1 || true
+        fi
+        echo -e "${GREEN}✅ Environnement Python configuré${NC}"
     fi
     
     # Fix port configuration in project files
@@ -1458,12 +1475,19 @@ detect_dev_command() {
             echo "$pm_cmd start"
         fi
     elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+        # Use venv python if it exists, otherwise fallback to system python
+        local py_cmd="python"
+        if [ -d "venv/bin" ]; then
+            py_cmd="./venv/bin/python"
+        fi
         if [ -f "manage.py" ]; then
-            echo "python manage.py runserver 0.0.0.0:\$PORT"
+            echo "$py_cmd manage.py runserver 0.0.0.0:\$PORT"
         elif [ -f "app.py" ]; then
-            echo "python app.py"
+            echo "$py_cmd app.py"
+        elif [ -f "main.py" ]; then
+            echo "$py_cmd main.py"
         else
-            echo "python -m http.server \$PORT"
+            echo "$py_cmd -m http.server \$PORT"
         fi
     elif [ -f "Cargo.toml" ]; then
         echo "cargo run"
