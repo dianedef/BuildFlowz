@@ -151,18 +151,60 @@
         }, 100);
     }
 
-    function generateSelector(element) {
+    function generateXPath(element) {
         if (element.id) {
-            return '#' + element.id;
+            return '//*[@id="' + element.id + '"]';
         }
-        let selector = element.tagName.toLowerCase();
-        if (element.classList && element.classList.length > 0) {
-            const classes = Array.from(element.classList).filter(c => !c.startsWith('buildflowz'));
-            if (classes.length) {
-                selector += '.' + classes.join('.');
+
+        var parts = [];
+        var current = element;
+
+        while (current && current.nodeType === Node.ELEMENT_NODE) {
+            var tagName = current.tagName.toLowerCase();
+
+            // Stop at body
+            if (tagName === 'body') {
+                parts.unshift('/body');
+                break;
             }
+
+            // If element has id, use it and stop
+            if (current.id) {
+                parts.unshift('//*[@id="' + current.id + '"]');
+                break;
+            }
+
+            // Calculate position among siblings of same tag
+            var index = 1;
+            var sibling = current.previousElementSibling;
+            while (sibling) {
+                if (sibling.tagName.toLowerCase() === tagName) {
+                    index++;
+                }
+                sibling = sibling.previousElementSibling;
+            }
+
+            // Check if index is needed (multiple siblings of same tag)
+            var needsIndex = false;
+            sibling = current.nextElementSibling;
+            while (sibling) {
+                if (sibling.tagName.toLowerCase() === tagName) {
+                    needsIndex = true;
+                    break;
+                }
+                sibling = sibling.nextElementSibling;
+            }
+
+            if (index > 1 || needsIndex) {
+                parts.unshift('/' + tagName + '[' + index + ']');
+            } else {
+                parts.unshift('/' + tagName);
+            }
+
+            current = current.parentElement;
         }
-        return selector;
+
+        return parts.join('');
     }
 
     var zoomHandler = null;
@@ -295,9 +337,9 @@
                         // Haptic feedback for short press
                         if (navigator.vibrate) navigator.vibrate(30);
                         flashElement(targetDiv);
-                        var selector = generateSelector(targetDiv);
-                        navigator.clipboard.writeText(selector).then(function() {
-                            console.log('Selector copied: ', selector);
+                        var xpath = generateXPath(targetDiv);
+                        navigator.clipboard.writeText(xpath).then(function() {
+                            console.log('XPath copied: ', xpath);
                         });
                     }
                 }
