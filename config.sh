@@ -123,6 +123,13 @@ export BUILDFLOWZ_DANGEROUS_CHARS_REGEX='[\;\&\|\$\`]'
 export BUILDFLOWZ_CADDYFILE="/etc/caddy/Caddyfile"
 
 # ============================================================================
+# SECRETS / CREDENTIAL CACHE CONFIGURATION
+# ============================================================================
+
+# Directory for storing cached credentials (chmod 700)
+export BUILDFLOWZ_SECRETS_DIR="${BUILDFLOWZ_SECRETS_DIR:-$HOME/.buildflowz}"
+
+# ============================================================================
 # SESSION IDENTITY CONFIGURATION
 # ============================================================================
 

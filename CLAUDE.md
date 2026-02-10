@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Port ranges, SSH settings, logging config, cache TTL
 - Tool requirements and validation patterns
 
-**menu_simple_color.sh** - Text-based interactive menu (no dependencies)
+**menu_simple_color.sh** - Deprecated stub (redirects to menu.sh)
 **menu.sh** - Gum-based interactive menu (requires gum)
 
 ### Key Architecture Patterns
@@ -137,14 +137,14 @@ fi
 # Syntax validation
 bash -n lib.sh
 bash -n menu.sh
-bash -n menu_simple_color.sh
+bash -n menu.sh
 ```
 
 ### Using the Menu Systems
 
 ```bash
 # Server-side (interactive menus)
-./menu_simple_color.sh  # Text-based (no dependencies)
+./menu.sh               # Unified menu (auto-detects gum, text fallback)
 ./menu.sh               # Gum-based (requires gum)
 
 # Local machine (SSH tunnels)
@@ -412,7 +412,7 @@ BuildFlowz/
 ├── lib.sh                   # Core library (43K)
 ├── config.sh                # Centralized config (6.3K)
 ├── menu.sh                  # Gum-based menu
-├── menu_simple_color.sh     # Text-based menu
+├── menu_simple_color.sh     # Deprecated (redirects to menu.sh)
 ├── install.sh               # Server installation
 ├── local/                   # Local machine scripts
 │   ├── dev-tunnel.sh        # Auto SSH tunnels

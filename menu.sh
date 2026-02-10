@@ -1,568 +1,704 @@
 #!/bin/bash
 
-# Load shared library
+# BuildFlowz Menu - Unified (Phase 2)
+# Single menu file with gum auto-detection and text fallback
+# Replaces both menu.sh (gum-only) and menu_simple_color.sh (text-only)
+
+# Load shared library (includes ui_* wrappers, select_environment, etc.)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
-# Vérifier si gum est installé
-if ! command -v gum &> /dev/null; then
-    echo "gum n'est pas installé. Installation..."
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
-    sudo apt update && sudo apt install -y gum
-fi
+# Header display
+print_header() {
+    ui_header "BuildFlowz DevServer" "Development Environment"
 
-# Fonction principale avec boucle
+    # Display session identity banner if enabled
+    if [ "$BUILDFLOWZ_SESSION_ENABLED" = "true" ]; then
+        init_session 2>/dev/null
+        display_session_banner
+        echo ""
+    fi
+}
+
+# Main menu display
+show_menu() {
+    echo -e "${BLUE}📊 OVERVIEW${NC}"
+    echo -e "  ${CYAN}1)${NC} Dashboard - View all environments at once"
+    echo ""
+    echo -e "${BLUE}🚀 MANAGE${NC}"
+    echo -e "  ${CYAN}2)${NC} Start/Deploy - Launch or deploy environment"
+    echo -e "  ${CYAN}3)${NC} Restart - Restart an environment"
+    echo -e "  ${CYAN}4)${NC} Stop - Stop an environment"
+    echo -e "  ${CYAN}5)${NC} Remove - Delete an environment"
+    echo ""
+    echo -e "${BLUE}🌐 PUBLISHING${NC}"
+    echo -e "  ${CYAN}6)${NC} Publish to Web - Configure HTTPS (Caddy + DuckDNS)"
+    echo ""
+    echo -e "${BLUE}⚡ BATCH${NC}"
+    echo -e "  ${CYAN}7)${NC} Batch Operations - Stop All, Start All, Restart All"
+    echo ""
+    echo -e "${BLUE}⚙️  ADVANCED${NC}"
+    echo -e "  ${CYAN}8)${NC} More Options - Logs, Navigate, Settings..."
+    echo ""
+    echo -e "${BLUE}📖 DOCUMENTATION${NC}"
+    echo -e "  ${CYAN}9)${NC} Help - How BuildFlowz works"
+    echo ""
+    echo -e "  ${CYAN}0)${NC} Exit"
+    echo ""
+}
+
+# Help documentation (paginated)
+show_help() {
+    local page=1
+    local total_pages=4
+
+    while true; do
+        clear
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo -e "              ${YELLOW}BuildFlowz Help${NC} (Page $page/$total_pages)"
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo ""
+
+        case $page in
+            1)
+                echo -e "${GREEN}🚀 QUICKSTART GUIDE${NC}"
+                echo ""
+                echo -e "${YELLOW}First time? Follow these steps:${NC}"
+                echo ""
+                echo -e "  ${CYAN}Step 1:${NC} ${GREEN}Have a project ready${NC}"
+                echo -e "         Place your project in ${YELLOW}/root/${NC} directory"
+                echo -e "         (or clone from GitHub using option 2 → 3)"
+                echo ""
+                echo -e "  ${CYAN}Step 2:${NC} ${GREEN}Start your project${NC}"
+                echo -e "         From main menu, press ${YELLOW}2${NC} (Start/Deploy)"
+                echo -e "         Then press ${YELLOW}1${NC} (Auto-detect)"
+                echo -e "         Select your project from the list"
+                echo ""
+                echo -e "  ${CYAN}Step 3:${NC} ${GREEN}Access your app${NC}"
+                echo -e "         Your app runs on ${YELLOW}http://localhost:<port>${NC}"
+                echo -e "         Check the Dashboard (${YELLOW}1${NC}) to see the port"
+                echo ""
+                echo -e "  ${CYAN}Step 4:${NC} ${GREEN}Publish to web (optional)${NC}"
+                echo -e "         Press ${YELLOW}6${NC} to configure HTTPS with DuckDNS"
+                echo ""
+                echo -e "${BLUE}┌───────────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC} ${YELLOW}Quick Reference:${NC}                                              ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}   ${CYAN}1${NC} Dashboard  ${CYAN}2${NC} Start  ${CYAN}3${NC} Restart  ${CYAN}4${NC} Stop  ${CYAN}5${NC} Remove      ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}   ${CYAN}6${NC} Publish    ${CYAN}7${NC} Batch  ${CYAN}8${NC} Advanced ${CYAN}9${NC} Help  ${CYAN}0${NC} Exit        ${BLUE}│${NC}"
+                echo -e "${BLUE}└───────────────────────────────────────────────────────────────┘${NC}"
+                ;;
+            2)
+                echo -e "${GREEN}📐 HOW BUILDFLOWZ WORKS${NC}"
+                echo ""
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  You select a project from the menu                      ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  BuildFlowz checks: does project have ${CYAN}.flox${NC} directory?  ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}✓ Yes${NC} → use existing    ${YELLOW}✗ No${NC} → create & configure     ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  Auto-detect project type & dev command:                 ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  • package.json → ${CYAN}npm/yarn/pnpm dev${NC}                     ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  • requirements.txt → ${CYAN}./venv/bin/python main.py${NC}        ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  • Cargo.toml → ${CYAN}cargo run${NC}                              ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  Create ${CYAN}ecosystem.config.cjs${NC} for PM2:                   ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${YELLOW}script:${NC} bash -c \"flox activate -- <dev command>\"       ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                echo -e "                              ${YELLOW}│${NC}"
+                echo -e "                              ${YELLOW}▼${NC}"
+                echo -e "${BLUE}┌─────────────────────────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC}  PM2 manages the process:                                ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}• Auto-restart on crash${NC}                                ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}• Logs captured${NC}                                        ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}  ${GREEN}• Port management${NC}                                      ${BLUE}│${NC}"
+                echo -e "${BLUE}└─────────────────────────────────────────────────────────┘${NC}"
+                ;;
+            3)
+                echo -e "${GREEN}🛠️  SUPPORTED TECHNOLOGIES${NC}"
+                echo ""
+                echo -e "${BLUE}┌──────────────────┬────────────────────────────────────┐${NC}"
+                echo -e "${BLUE}│${NC} ${YELLOW}Language/Stack${NC}   ${BLUE}│${NC} ${YELLOW}Detection & Commands${NC}               ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Node.js${NC}          ${BLUE}│${NC} package.json                       ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → npm/yarn/pnpm install & dev      ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Python${NC}           ${BLUE}│${NC} requirements.txt / pyproject.toml  ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → venv + pip install + python      ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Rust${NC}             ${BLUE}│${NC} Cargo.toml                         ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → cargo run                        ${BLUE}│${NC}"
+                echo -e "${BLUE}├──────────────────┼────────────────────────────────────┤${NC}"
+                echo -e "${BLUE}│${NC} ${CYAN}Go${NC}               ${BLUE}│${NC} go.mod                             ${BLUE}│${NC}"
+                echo -e "${BLUE}│${NC}                  ${BLUE}│${NC} → go run .                         ${BLUE}│${NC}"
+                echo -e "${BLUE}└──────────────────┴────────────────────────────────────┘${NC}"
+                echo ""
+                echo -e "${GREEN}📦 FRAMEWORKS AUTO-DETECTED${NC}"
+                echo ""
+                echo -e "  ${CYAN}•${NC} Next.js     → ${YELLOW}npm dev -p \$PORT${NC}"
+                echo -e "  ${CYAN}•${NC} Astro       → ${YELLOW}npm dev -- --port \$PORT --host${NC}"
+                echo -e "  ${CYAN}•${NC} Vite        → ${YELLOW}npm dev -- --port \$PORT --host${NC}"
+                echo -e "  ${CYAN}•${NC} Nuxt        → ${YELLOW}npm dev --port \$PORT${NC}"
+                echo -e "  ${CYAN}•${NC} Django      → ${YELLOW}python manage.py runserver 0.0.0.0:\$PORT${NC}"
+                echo -e "  ${CYAN}•${NC} Flask/FastAPI → ${YELLOW}python app.py${NC} or ${YELLOW}python main.py${NC}"
+                echo ""
+                echo -e "${GREEN}🔧 ENVIRONMENT ISOLATION${NC}"
+                echo ""
+                echo -e "  ${CYAN}Flox${NC} provides reproducible, isolated environments"
+                echo -e "  Each project gets its own dependencies via Nix"
+                ;;
+            4)
+                echo -e "${GREEN}🔍 WEB INSPECTOR (Visual Selection)${NC}"
+                echo ""
+                echo -e "  Inject a visual element selector into your web app:"
+                echo ""
+                echo -e "  ${CYAN}•${NC} Toggle via ${YELLOW}Advanced → Toggle Web Inspector${NC}"
+                echo -e "  ${CYAN}•${NC} Shows numbered buttons on every ${YELLOW}<div>${NC} element"
+                echo -e "  ${CYAN}•${NC} ${GREEN}Click${NC} → Copy XPath to clipboard"
+                echo -e "  ${CYAN}•${NC} ${GREEN}Long-press${NC} → Screenshot menu:"
+                echo -e "      - Copy to clipboard"
+                echo -e "      - Download PNG"
+                echo -e "      - Upload & copy URL (imgbb)"
+                echo ""
+                echo -e "${GREEN}🖥️  ERUDA CONSOLE${NC}"
+                echo ""
+                echo -e "  Mobile-friendly developer console injected automatically:"
+                echo ""
+                echo -e "  ${CYAN}•${NC} View console.log output"
+                echo -e "  ${CYAN}•${NC} Inspect network requests"
+                echo -e "  ${CYAN}•${NC} View DOM elements"
+                echo -e "  ${CYAN}•${NC} Debug JavaScript errors"
+                echo -e "  ${CYAN}•${NC} Check storage (localStorage, cookies)"
+                echo ""
+                echo -e "${YELLOW}💡 Both tools are injected via:${NC}"
+                echo -e "   ${CYAN}injectors/web-inspector.js${NC}"
+                ;;
+        esac
+
+        echo ""
+        echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
+        echo -e "  ${CYAN}p${NC} Previous   ${CYAN}Enter/n${NC} Next   ${CYAN}1-4${NC} Jump   ${CYAN}0${NC} Back"
+        echo -e "${CYAN}──────────────────────────────────────────────────${NC}"
+        echo ""
+        echo -e "${YELLOW}[$page/$total_pages]:${NC} \c"
+        read -r help_choice
+
+        case $help_choice in
+            ""|n|N)
+                if [ $page -lt $total_pages ]; then
+                    page=$((page + 1))
+                fi
+                ;;
+            p|P|b|B)
+                if [ $page -gt 1 ]; then
+                    page=$((page - 1))
+                fi
+                ;;
+            0|q|Q)
+                return
+                ;;
+            [1-4])
+                page=$help_choice
+                ;;
+        esac
+    done
+}
+
+# Batch operations submenu
+show_batch_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo -e "              ${YELLOW}Batch Operations${NC}"
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "  ${CYAN}1)${NC} 🛑 Stop All - Stop all environments"
+        echo -e "  ${CYAN}2)${NC} 🚀 Start All - Start all environments"
+        echo -e "  ${CYAN}3)${NC} 🔄 Restart All - Restart all environments"
+        echo ""
+        echo -e "  ${CYAN}0)${NC} ← Back to Main Menu"
+        echo ""
+
+        echo -e "${YELLOW}Your choice:${NC} \c"
+        read -r batch_choice
+
+        case $batch_choice in
+            1)
+                batch_stop_all
+                ;;
+            2)
+                batch_start_all
+                ;;
+            3)
+                batch_restart_all
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option${NC}"
+                ;;
+        esac
+
+        echo ""
+        echo -e "${YELLOW}Press Enter to continue...${NC}"
+        read -r
+    done
+}
+
+# Submenu "More Options"
+show_advanced_menu() {
+    while true; do
+        clear
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo -e "                 ${YELLOW}Advanced Options${NC}"
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+
+        echo -e "${GREEN}Choose an option:${NC}"
+        echo ""
+        echo -e "  ${CYAN}1)${NC} 📝 View Logs - Display application logs"
+        echo -e "  ${CYAN}2)${NC} 📁 Navigate Projects - Browse /root directory"
+        echo -e "  ${CYAN}3)${NC} 📂 Open Code Directory - cd into project"
+        echo -e "  ${CYAN}4)${NC} 🔍 Toggle Web Inspector - Enable/disable browser inspector"
+        echo -e "  ${CYAN}5)${NC} 🔐 Session Identity - View or reset session"
+        echo ""
+        echo -e "  ${CYAN}0)${NC} ← Back to Main Menu"
+        echo ""
+
+        echo -e "${YELLOW}Your choice:${NC} \c"
+        read -r adv_choice
+
+        case $adv_choice in
+            1)
+                # View Logs
+                echo -e "${GREEN}📝 View Application Logs${NC}"
+                ENV_NAME=$(select_environment "Select environment to view logs")
+
+                if [ -n "$ENV_NAME" ]; then
+                    view_environment_logs "$ENV_NAME"
+                fi
+                ;;
+            2)
+                # Navigate Projects
+                echo -e "${GREEN}📁 Navigate Projects in /root${NC}"
+                FOLDERS=$(find /root -maxdepth 1 -type d ! -name ".*" ! -path /root 2>/dev/null | sort)
+
+                if [ -z "$FOLDERS" ]; then
+                    echo -e "${RED}❌ No folders found${NC}"
+                else
+                    SELECTED=$(echo "$FOLDERS" | ui_choose "Available folders:")
+                    if [ -n "$SELECTED" ]; then
+                        echo -e "${GREEN}📁 Selected folder: $SELECTED${NC}"
+                        echo -e "${GREEN}Opening shell...${NC}"
+                        cd "$SELECTED" && exec $SHELL
+                    fi
+                fi
+                ;;
+            3)
+                # Open Code Directory
+                echo -e "${GREEN}📂 Open Code Directory${NC}"
+                ENV_NAME=$(select_environment "Select environment to open")
+
+                if [ -n "$ENV_NAME" ]; then
+                    PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
+
+                    if [ -z "$PROJECT_DIR" ]; then
+                        echo -e "${RED}❌ Directory not found: $ENV_NAME${NC}"
+                    else
+                        echo -e "${GREEN}📂 Project directory: $PROJECT_DIR${NC}"
+                        echo -e "${GREEN}Opening shell...${NC}"
+                        cd "$PROJECT_DIR" && exec $SHELL
+                    fi
+                fi
+                ;;
+            4)
+                # Toggle Web Inspector
+                echo -e "${GREEN}🔍 Toggle Web Inspector${NC}"
+                ENV_NAME=$(select_environment "Select environment for web inspector")
+
+                if [ -n "$ENV_NAME" ]; then
+                    PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
+
+                    if [ -z "$PROJECT_DIR" ]; then
+                        echo -e "${RED}❌ Project not found: $ENV_NAME${NC}"
+                    else
+                        toggle_web_inspector "$PROJECT_DIR"
+                        env_restart "$ENV_NAME"
+                    fi
+                fi
+                ;;
+            5)
+                # Session Identity Management
+                echo -e "${GREEN}🔐 Session Identity Management${NC}"
+                echo ""
+
+                display_session_banner
+                echo ""
+                get_session_info
+                echo ""
+
+                echo -e "${BLUE}Options:${NC}"
+                echo -e "  ${CYAN}1)${NC} 🔄 Reset Session Identity (generate new pattern)"
+                echo -e "  ${CYAN}0)${NC} ← Back"
+                echo ""
+                echo -e "${YELLOW}Your choice:${NC} \c"
+                read -r session_choice
+
+                case $session_choice in
+                    1)
+                        reset_session
+                        echo ""
+                        echo -e "${GREEN}New session identity:${NC}"
+                        display_session_banner
+                        ;;
+                    *)
+                        ;;
+                esac
+                ;;
+            0)
+                return 0
+                ;;
+            *)
+                echo -e "${RED}❌ Invalid option${NC}"
+                ;;
+        esac
+
+        echo ""
+        echo -e "${YELLOW}Press Enter to continue...${NC}"
+        read -r
+    done
+}
+
+# Main function
 main() {
     # Check prerequisites on first run
     if ! check_prerequisites; then
         exit 1
     fi
 
+    # Clean up orphan projects at startup
+    cleanup_orphan_projects
+
     while true; do
         clear
+        print_header
+        show_menu
 
-        # Titre stylisé
-        gum style \
-            --foreground 212 --border-foreground 212 --border double \
-            --align center --width 50 --margin "1 2" --padding "1 2" \
-            "BuildFlowz" "Menu Interactif avec Gum"
-
-        # Display session identity if enabled
-        if [ "$BUILDFLOWZ_SESSION_ENABLED" = "true" ]; then
-            init_session 2>/dev/null
-            local session_id=$(get_session_id 2>/dev/null)
-            if [ -n "$session_id" ]; then
-                local hash_art=$(generate_hash_art "$session_id" 2>/dev/null)
-                local session_code=$(get_session_code "$session_id" 2>/dev/null)
-                local user="${USER:-unknown}"
-                local host="${HOSTNAME:-$(hostname 2>/dev/null || echo 'unknown')}"
-
-                # Display session banner with gum
-                echo ""
-                gum style \
-                    --foreground 141 --border-foreground 141 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Session Identity"
-
-                # Display hash art
-                echo "$hash_art" | gum style --foreground 45 --align center --width 50
-
-                # Display user info and session code
-                gum style \
-                    --foreground 82 --align center --width 50 \
-                    "$user@$host    $session_code"
-                echo ""
-            fi
-        fi
-
-        # Menu de sélection
-        CHOICE=$(gum choose "📁 Naviguer dans /root" "📋 Lister les environnements" "🌐 Afficher les URLs" "🛑 Stopper un environnement" "📝 Ouvrir le répertoire de code" "🚀 Déployer un repo GitHub" "🗑️ Supprimer un environnement"             "🚀 Démarrer un environnement" \
-            "🚀 Démarrer un environnement (custom path)" \
-            "🌐 Publier sur le web" "🔍 Basculer l'inspecteur web" "👋 Quitter")
+        echo -e "${YELLOW}Your choice:${NC} \c"
+        read -r CHOICE
 
         case $CHOICE in
-            "📁 Naviguer dans /root")
-                gum style --foreground 45 "📁 Dossiers disponibles dans /root"
-                
-                FOLDERS=$(find /root -maxdepth 1 -type d ! -name ".*" ! -path /root | sort)
-                
-                if [ -z "$FOLDERS" ]; then
-                    gum style --foreground 196 "❌ Aucun dossier trouvé"
-                else
-                    SELECTED=$(echo "$FOLDERS" | gum choose)
-                    
-                    if [ -n "$SELECTED" ]; then
-                        gum style --foreground 82 "📁 Dossier sélectionné: $SELECTED"
-                        
-                        if gum confirm "Ouvrir un shell dans ce dossier ?"; then
-                            cd "$SELECTED" && exec $SHELL
-                        fi
-                    fi
-                fi
+            1)
+                # Dashboard
+                show_dashboard
                 ;;
-            "📋 Lister les environnements")
-                gum style \
-                    --foreground 45 --border-foreground 45 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Environnements PM2"
-                
-                gum spin --spinner dot --title "Chargement des environnements..." -- sleep 0.5
-                
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    gum style --foreground 196 "❌ Aucun environnement trouvé"
-                else
-                    echo ""
-                    while IFS= read -r name; do
-                        pm2_status=$(get_pm2_status "$name")
-                        project_dir=$(resolve_project_path "$name")
-                        
-                        # Afficher le statut avec gum style
-                        case "$pm2_status" in
-                            "online")
-                                gum style --foreground 82 "🟢 [ONLINE] $name"
-                                ;;
-                            "stopped")
-                                gum style --foreground 226 "🟡 [STOPPED] $name"
-                                ;;
-                            "errored"|"error")
-                                gum style --foreground 196 "🔴 [ERROR] $name"
-                                ;;
-                            "pm2-not-installed")
-                                gum style --foreground 196 "❌ [PM2 NOT INSTALLED] $name"
-                                ;;
-                            *)
-                                gum style --foreground 45 "⚪ [${pm2_status^^}] $name"
-                                ;;
-                        esac
-                        
-                        # Afficher le répertoire du projet
-                        if [ -n "$project_dir" ]; then
-                            gum style --foreground 33 "   📂 $project_dir"
-                            
-                            # Afficher si environnement Flox présent
-                            if [ -d "$project_dir/.flox" ]; then
-                                gum style --foreground 82 "   ✅ Flox activé"
-                            fi
-                        fi
-                        
-                        # Afficher le port si disponible
-                        port=$(get_port_from_pm2 "$name")
-                        if [ -n "$port" ]; then
-                            gum style --foreground 45 "   🔌 Port: $port"
-                        fi
-                        echo ""
-                    done <<< "$ALL_ENVS"
-                fi
-                ;;
-            "🌐 Afficher les URLs")
-                gum style \
-                    --foreground 33 --border-foreground 33 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "URLs des environnements"
-                
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    gum style --foreground 196 "❌ Aucun environnement trouvé"
-                else
-                    echo ""
-                    SELECTED_ENV=$(echo "$ALL_ENVS" | gum choose --header "Choisissez un environnement:")
-                    
-                    if [ -n "$SELECTED_ENV" ]; then
-                        echo ""
-                        gum style --foreground 82 "🌐 URLs pour $SELECTED_ENV"
-                        
-                        PORT=$(get_port_from_pm2 "$SELECTED_ENV")
-                        
-                        if [ -n "$PORT" ]; then
-                            echo ""
-                            gum style --foreground 45 "  • http://localhost:${PORT}"
-                        else
-                            echo ""
-                            gum style --foreground 226 "  ⚠️  Projet non démarré ou port non assigné"
-                        fi
-                    fi
-                fi
-                ;;
-            "🛑 Stopper un environnement")
-                gum style \
-                    --foreground 196 --border-foreground 196 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Stopper un environnement"
-                
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    gum style --foreground 196 "❌ Aucun environnement trouvé"
-                else
-                    echo ""
-                    SELECTED_ENV=$(echo "$ALL_ENVS" | gum filter --placeholder "Rechercher un environnement...")
-                    
-                    if [ -n "$SELECTED_ENV" ]; then
-                        echo ""
-                        if gum confirm "Arrêter $SELECTED_ENV ?"; then
-                            gum spin --spinner dot --title "Arrêt de $SELECTED_ENV..." -- env_stop "$SELECTED_ENV"
-                            echo ""
-                            gum style --foreground 82 "✅ Environnement $SELECTED_ENV arrêté !"
-                        fi
-                    fi
-                fi
-                ;;
-            "📝 Ouvrir le répertoire de code")
-                gum style \
-                    --foreground 33 --border-foreground 33 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Ouvrir le répertoire de code"
-                
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    gum style --foreground 196 "❌ Aucun environnement trouvé"
-                else
-                    echo ""
-                    SELECTED_ENV=$(echo "$ALL_ENVS" | gum filter --placeholder "Rechercher un environnement...")
-                    
-                    if [ -n "$SELECTED_ENV" ]; then
-                        PROJECT_DIR="$PROJECTS_DIR/$SELECTED_ENV"
-                        
-                        if [ -d "$PROJECT_DIR" ]; then
-                            gum style --foreground 82 "📂 Répertoire: $PROJECT_DIR"
-                            
-                            if gum confirm "Ouvrir un shell dans ce dossier ?"; then
-                                cd "$PROJECT_DIR" && exec $SHELL
-                            fi
-                        else
-                            gum style --foreground 196 "❌ Répertoire introuvable: $PROJECT_DIR"
-                        fi
-                    fi
-                fi
-                ;;
-            "🚀 Déployer un repo GitHub")
-                gum style \
-                    --foreground 82 --border-foreground 82 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Déployer un repo GitHub"
-                
-                echo ""
-                gum spin --spinner dot --title "Recherche de vos repos GitHub..." -- sleep 0.5
-                
-                GITHUB_REPOS=$(list_github_repos)
-                
-                if [ -z "$GITHUB_REPOS" ]; then
-                    gum style --foreground 196 "❌ Aucun repo trouvé ou erreur d'authentification"
-                else
-                    echo ""
-                    SELECTED_REPO=$(echo "$GITHUB_REPOS" | cut -d':' -f1 | gum filter --placeholder "Rechercher un repo...")
 
-                    if [ -n "$SELECTED_REPO" ]; then
-                        # Validate repo name
-                        if ! validate_repo_name "$SELECTED_REPO"; then
-                            gum style --foreground 196 "❌ Invalid repository name"
+            2)
+                # Start/Deploy
+                echo -e "${GREEN}🚀 Start/Deploy Environment${NC}"
+                echo ""
+                echo -e "${BLUE}Choose source:${NC}"
+                echo ""
+                echo -e "  ${CYAN}1)${NC} 🔍 Auto-detect project in /root"
+                echo -e "  ${CYAN}2)${NC} 📁 Custom local path"
+                echo -e "  ${CYAN}3)${NC} 🚀 Deploy from GitHub"
+                echo -e "  ${CYAN}0)${NC} Cancel"
+                echo ""
+                echo -e "${YELLOW}Your choice:${NC} \c"
+                read -r deploy_choice
+
+                case $deploy_choice in
+                    1)
+                        # Auto-detect projects
+                        echo -e "${BLUE}🔍 Scanning $PROJECTS_DIR for projects...${NC}"
+
+                        EXISTING_ENVS=$(find "$PROJECTS_DIR" -maxdepth 4 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
+                            proj_dir=$(dirname "$flox_dir")
+                            case "$proj_dir" in
+                                "$PROJECTS_DIR"/.*) continue ;;
+                                *) echo "$proj_dir" ;;
+                            esac
+                        done | sort -u)
+
+                        NEW_PROJECTS=$(find "$PROJECTS_DIR" -maxdepth 4 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | while read -r manifest; do
+                            proj_dir=$(dirname "$manifest")
+                            case "$proj_dir" in
+                                "$PROJECTS_DIR"/.*) continue ;;
+                            esac
+                            if [ ! -d "$proj_dir/.flox" ]; then
+                                echo "$proj_dir"
+                            fi
+                        done | sort -u)
+
+                        PROJECTS=$(printf "%s\n%s" "$EXISTING_ENVS" "$NEW_PROJECTS" | grep -v "^$" | sort -u)
+
+                        if [ -z "$PROJECTS" ]; then
+                            echo -e "${YELLOW}⚠️  No projects detected${NC}"
+                            echo -e "${BLUE}💡 Tip: Use option 2 for custom path or option 3 for GitHub${NC}"
+                        else
+                            SELECTED_PROJECT=$(echo "$PROJECTS" | ui_choose "Detected projects:")
+                            if [ -n "$SELECTED_PROJECT" ]; then
+                                echo -e "${GREEN}✅ Starting: $SELECTED_PROJECT${NC}"
+                                env_start "$SELECTED_PROJECT"
+                            fi
+                        fi
+                        ;;
+                    2)
+                        # Custom path
+                        CUSTOM_PATH=$(ui_input "Path (absolute):" "/root/my-project")
+
+                        if [ -z "$CUSTOM_PATH" ]; then
+                            echo -e "${RED}❌ Path required${NC}"
+                        elif ! validate_project_path "$CUSTOM_PATH"; then
+                            echo -e "${RED}❌ Invalid or unsafe path${NC}"
+                        else
+                            env_start "$CUSTOM_PATH"
+                        fi
+                        ;;
+                    3)
+                        # Deploy from GitHub
+                        echo -e "${GREEN}🚀 Deploy from GitHub${NC}"
+                        echo ""
+                        echo -e "${BLUE}🔍 Fetching your GitHub repos...${NC}"
+                        echo ""
+
+                        GITHUB_REPOS=$(list_github_repos)
+
+                        if [ -z "$GITHUB_REPOS" ]; then
                             continue
                         fi
 
-                        PROJECT_NAME="${SELECTED_REPO,,}"
-                        PROJECT_DIR="$PROJECTS_DIR/$PROJECT_NAME"
-                        
-                        echo ""
-                        gum style --foreground 82 "📦 Repo sélectionné: $SELECTED_REPO"
-                        
-                        # Vérifier si le projet existe déjà
-                        if [ -d "$PROJECT_DIR" ]; then
-                            echo ""
-                            gum style --foreground 226 "⚠️  Le projet $PROJECT_NAME existe déjà"
-                            
-                            if gum confirm "Voulez-vous le remplacer ?"; then
-                                env_remove "$PROJECT_NAME"
-                            else
-                                gum style --foreground 45 "❌ Annulé"
+                        SELECTED_REPO=$(echo "$GITHUB_REPOS" | cut -d':' -f1 | ui_choose "Available repos:")
+
+                        if [ -n "$SELECTED_REPO" ]; then
+                            if ! validate_repo_name "$SELECTED_REPO"; then
+                                echo -e "${RED}❌ Invalid repository name${NC}"
                                 continue
                             fi
-                        fi
-                        
-                        echo ""
-                        mkdir -p "$PROJECT_DIR"
-                        
-                        # Cloner le repo
-                        GITHUB_USER=$(get_github_username)
-                        gum spin --spinner dot --title "Clonage de $SELECTED_REPO..." -- git clone "https://github.com/$GITHUB_USER/$SELECTED_REPO.git" "$PROJECT_DIR" 2>/dev/null
-                        
-                        if [ ! -d "$PROJECT_DIR/.git" ]; then
-                            gum style --foreground 196 "❌ Erreur lors du clonage"
-                            rm -rf "$PROJECT_DIR"
-                        else
-                            gum style --foreground 82 "✅ Repo cloné avec succès"
-                            
-                            # Initialiser l'environnement Flox
+
                             echo ""
-                            gum spin --spinner dot --title "Initialisation de l'environnement Flox..." -- init_flox_env "$PROJECT_DIR" "$PROJECT_NAME"
-                            
-                            if [ $? -ne 0 ]; then
-                                gum style --foreground 196 "❌ Échec de l'initialisation Flox"
-                                rm -rf "$PROJECT_DIR"
-                            else
-                                # Démarrer l'environnement
-                                echo ""
-                                gum spin --spinner dot --title "Démarrage du projet..." -- env_start "$PROJECT_NAME"
-                                
-                                PORT=$(get_port_from_pm2 "$PROJECT_NAME")
-                                
-                                echo ""
-                                gum style --foreground 82 "✅ Déploiement réussi !"
-                                
-                                if [ -n "$PORT" ]; then
-                                    echo ""
-                                    gum style --foreground 45 "🌐 URL: http://localhost:${PORT}"
-                                fi
-                                
-                                echo ""
-                                gum style --foreground 226 "📝 Code dans: $PROJECT_DIR"
-                            fi
+                            echo -e "${GREEN}📦 Selected repo: $SELECTED_REPO${NC}"
+                            echo -e "${BLUE}🚀 Deploying...${NC}"
+                            echo ""
+
+                            deploy_github_project "$SELECTED_REPO"
                         fi
-                    fi
+                        ;;
+                    0)
+                        echo -e "${BLUE}Cancelled${NC}"
+                        ;;
+                    *)
+                        echo -e "${RED}❌ Invalid option${NC}"
+                        ;;
+                esac
+                ;;
+
+            3)
+                # Restart
+                echo -e "${GREEN}🔄 Restart Environment${NC}"
+                ENV_NAME=$(select_environment "Select environment to restart")
+
+                if [ -n "$ENV_NAME" ]; then
+                    env_restart "$ENV_NAME"
                 fi
                 ;;
-            "🗑️ Supprimer un environnement")
-                gum style \
-                    --foreground 196 --border-foreground 196 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Supprimer un environnement"
-                
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    gum style --foreground 196 "❌ Aucun environnement trouvé"
-                else
-                    echo ""
-                    SELECTED_ENV=$(echo "$ALL_ENVS" | gum filter --placeholder "Rechercher un environnement...")
-                    
-                    if [ -n "$SELECTED_ENV" ]; then
-                        echo ""
-                        gum style --foreground 196 "⚠️  ATTENTION : Cette action est irréversible !"
-                        gum style --foreground 226 "Projet: $SELECTED_ENV"
-                        gum style --foreground 226 "Dossier: $PROJECTS_DIR/$SELECTED_ENV"
-                        echo ""
-                        
-                        if gum confirm "Confirmer la suppression ?"; then
-                            gum spin --spinner dot --title "Suppression de $SELECTED_ENV..." -- env_remove "$SELECTED_ENV"
-                            echo ""
-                            gum style --foreground 82 "✅ Projet $SELECTED_ENV supprimé avec succès !"
-                        else
-                            gum style --foreground 45 "❌ Annulé"
-                        fi
-                    fi
+
+            4)
+                # Stop
+                echo -e "${GREEN}🛑 Stop Environment${NC}"
+                ENV_NAME=$(select_environment "Select environment to stop")
+
+                if [ -n "$ENV_NAME" ]; then
+                    echo -e "${YELLOW}🛑 Stopping $ENV_NAME...${NC}"
+                    env_stop "$ENV_NAME"
+                    echo -e "${GREEN}✅ Environment $ENV_NAME stopped!${NC}"
                 fi
                 ;;
-            "🚀 Démarrer un environnement")
-                gum style \
-                    --foreground 82 --border-foreground 82 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Démarrer un environnement"
-                
-                ALL_ENVS=$(list_all_environments)
-                
-                if [ -z "$ALL_ENVS" ]; then
-                    gum style --foreground 196 "❌ Aucun environnement trouvé"
-                else
-                    echo ""
-                    SELECTED_ENV=$(echo "$ALL_ENVS" | gum filter --placeholder "Rechercher un environnement...")
-                    
-                    if [ -n "$SELECTED_ENV" ]; then
-                        gum spin --spinner dot --title "Démarrage de $SELECTED_ENV..." -- env_start "$SELECTED_ENV"
-                        
-                        echo ""
-                        gum style --foreground 82 "✅ Projet démarré avec succès ou mis à jour !"
-                        
-                        PROJECT_DIR=$(resolve_project_path "$SELECTED_ENV")
-                        ENV_NAME=$(basename "$PROJECT_DIR") # Assuming project name is the last part of the path for PM2
-                        
-                        PORT=$(get_port_from_pm2 "$ENV_NAME")
-                        if [ -n "$PORT" ]; then
-                            echo ""
-                            gum style --foreground 45 "🌐 URL: http://localhost:${PORT}"
-                            gum style --foreground 226 "📝 Code dans: $PROJECT_DIR"
-                        else
-                            echo ""
-                            gum style --foreground 226 "⚠️  Port non assigné ou non détecté"
-                            gum style --foreground 226 "📝 Code dans: $PROJECT_DIR"
-                        fi
-                    fi
-                fi
-                ;;
-            "🚀 Démarrer un environnement (custom path)")
-                gum style \
-                    --foreground 82 --border-foreground 82 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Démarrer un environnement (custom path)"
+
+            5)
+                # Remove
+                echo -e "${GREEN}🗑️  Remove Environment${NC}"
                 echo ""
-                CUSTOM_PATH=$(gum input --placeholder "Entrez le chemin absolu du projet (ex: /root/my-robots/chatbot)")
-                if [ -z "$CUSTOM_PATH" ]; then
-                    gum style --foreground 196 "❌ Chemin requis"
-                elif ! validate_project_path "$CUSTOM_PATH" 2>&1 | while read -r line; do gum style --foreground 196 "$line"; done; then
-                    gum input --placeholder "Appuyez sur Entrée pour continuer..."
-                else
-                    gum spin --spinner dot --title "Démarrage du projet à partir de $CUSTOM_PATH..." -- env_start "$CUSTOM_PATH"
+                echo -e "${YELLOW}⚠️  WARNING: This will permanently delete the project!${NC}"
+                echo ""
+                ENV_NAME=$(select_environment "Select environment to remove")
+
+                if [ -n "$ENV_NAME" ]; then
+                    PROJECT_DIR=$(resolve_project_path "$ENV_NAME")
+
                     echo ""
-                    gum style --foreground 82 "✅ Projet démarré avec succès ou mis à jour !"
-                    
-                    PROJECT_DIR=$(resolve_project_path "$CUSTOM_PATH")
-                    if [ -n "$PROJECT_DIR" ]; then
-                        ENV_NAME=$(basename "$PROJECT_DIR") # This assumes project name is the last part of the path
-                        PORT=$(get_port_from_pm2 "$ENV_NAME")
-                        if [ -n "$PORT" ]; then
-                            echo ""
-                            gum style --foreground 45 "🌐 URL: http://localhost:${PORT}"
-                        else
-                            echo ""
-                            gum style --foreground 226 "⚠️  Port non assigné ou non détecté"
-                        fi
-                        echo ""
-                        gum style --foreground 226 "📝 Code dans: $PROJECT_DIR"
+                    echo -e "${RED}⚠️  You are about to delete:${NC}"
+                    echo -e "${YELLOW}   Environment: $ENV_NAME${NC}"
+                    echo -e "${YELLOW}   Directory: $PROJECT_DIR${NC}"
+                    echo ""
+
+                    if ui_confirm "Type 'yes' to confirm deletion"; then
+                        env_remove "$ENV_NAME"
+                        echo -e "${GREEN}✅ Environment removed!${NC}"
                     else
-                        gum style --foreground 196 "❌ Impossible de résoudre le répertoire du projet pour $CUSTOM_PATH"
+                        echo -e "${BLUE}Cancelled - nothing was deleted${NC}"
                     fi
                 fi
                 ;;
-            "🌐 Publier sur le web")
-                gum style \
-                    --foreground 45 --border-foreground 45 --border rounded \
-                    --align center --width 50 --padding "0 2" \
-                    "Publication Web (Caddy + DuckDNS)"
-                
-                # Vérifier Caddy
-                if ! command -v caddy &> /dev/null; then
-                    gum style --foreground 196 "❌ Caddy n'est pas installé"
-                    gum style --foreground 226 "Lancez: sudo ./install.sh"
+
+            6)
+                # Publish to Web with credential cache
+                echo -e "${GREEN}🌐 Publish to Web (HTTPS via Caddy + DuckDNS)${NC}"
+                echo ""
+
+                # Check if Caddy is installed
+                if ! command -v caddy >/dev/null 2>&1; then
+                    echo -e "${RED}❌ Caddy not installed${NC}"
+                    echo -e "${YELLOW}Install with: sudo apt install caddy${NC}"
                     continue
                 fi
-                
-                # Vérifier PM2
-                if ! command -v pm2 &> /dev/null; then
-                    gum style --foreground 196 "❌ PM2 n'est pas installé"
-                    continue
-                fi
-                
-                # Récupérer l'IP publique
-                echo ""
-                PUBLIC_IP=$(gum spin --spinner dot --title "Détection de l'IP publique..." -- curl -4 -s https://ip.me 2>/dev/null)
-                
-                if [ -z "$PUBLIC_IP" ]; then
-                    gum style --foreground 196 "❌ Impossible de récupérer l'IP publique"
-                    continue
-                fi
-                
-                gum style --foreground 82 "✅ IP publique détectée: $PUBLIC_IP"
-                echo ""
-                
-                # Configuration DuckDNS
-                gum style --foreground 45 "🦆 Configuration DuckDNS"
-                echo ""
-                gum style --foreground 33 "Votre URL sera: votresubdomain.duckdns.org"
-                gum style --foreground 226 "Créez un compte gratuit sur https://www.duckdns.org"
-                echo ""
-                
-                SUBDOMAIN=$(gum input --placeholder "Sous-domaine DuckDNS (ex: demo, dev)")
-                if [ -z "$SUBDOMAIN" ]; then
-                    gum style --foreground 196 "❌ Sous-domaine requis"
-                    continue
-                fi
-                
-                echo ""
-                TOKEN=$(gum input --placeholder "Token DuckDNS" --password)
-                if [ -z "$TOKEN" ]; then
-                    gum style --foreground 196 "❌ Token requis"
-                    continue
-                fi
-                
-                # Mise à jour DuckDNS
-                echo ""
-                DUCKDNS_RESPONSE=$(gum spin --spinner dot --title "Mise à jour DuckDNS..." -- curl -s "https://www.duckdns.org/update?domains=$SUBDOMAIN&token=$TOKEN&ip=$PUBLIC_IP")
-                
-                if [ "$DUCKDNS_RESPONSE" != "OK" ]; then
-                    gum style --foreground 196 "❌ Erreur DuckDNS: $DUCKDNS_RESPONSE"
-                    gum style --foreground 226 "Vérifiez votre sous-domaine et token"
-                    continue
-                fi
-                
-                gum style --foreground 82 "✅ DuckDNS configuré: $SUBDOMAIN.duckdns.org → $PUBLIC_IP"
-                echo ""
-                
-                # Récupérer les ports PM2
-                APPS=$(gum spin --spinner dot --title "Détection des applications PM2..." -- pm2 jlist 2>/dev/null | python3 -c "
-import sys, json
-try:
-    apps = json.load(sys.stdin)
-    for app in apps:
-        if app['pm2_env']['status'] == 'online':
-            env = app['pm2_env'].get('env', {})
-            port = env.get('PORT') or env.get('port')
-            if port:
-                name = app['name']
-                print(f'{name}:{port}')
-except:
-    pass
-" 2>/dev/null)
-                
-                if [ -z "$APPS" ]; then
-                    gum style --foreground 196 "❌ Aucune application PM2 trouvée"
-                    continue
-                fi
-                
-                # Générer le Caddyfile
-                CADDYFILE="/etc/caddy/Caddyfile"
-                
-                # Backup de l'ancien fichier
-                if [ -f "$CADDYFILE" ]; then
-                    sudo cp "$CADDYFILE" "${CADDYFILE}.backup.$(date +%s)"
-                fi
-                
-                # Créer le nouveau Caddyfile
-                {
-                    echo "# Auto-généré par BuildFlowz - $(date)"
-                    echo ""
-                    
-                    echo "$APPS" | while IFS=: read -r name port; do
-                        echo "${SUBDOMAIN}.duckdns.org/${name} {"
-                        echo "    reverse_proxy localhost:${port}"
-                        echo "}"
-                        echo ""
-                    done
-                } | sudo tee "$CADDYFILE" > /dev/null
-                
-                # Recharger Caddy
-                echo ""
-                if gum spin --spinner dot --title "Rechargement de Caddy..." -- sudo systemctl reload caddy 2>/dev/null || sudo caddy reload --config "$CADDYFILE" 2>/dev/null; then
-                    gum style --foreground 82 "✅ Caddy configuré et rechargé"
+
+                # Get public IP
+                echo -e "${BLUE}📡 Detecting public IP...${NC}"
+                PUBLIC_IP=$(curl -4 -s https://ip.me 2>/dev/null)
+                if [ -n "$PUBLIC_IP" ]; then
+                    echo -e "${BLUE}📡 Detected Public IP: ${GREEN}$PUBLIC_IP${NC}"
                 else
-                    gum style --foreground 226 "⚠️  Erreur lors du rechargement de Caddy"
-                    gum style --foreground 226 "Configuration sauvegardée dans $CADDYFILE"
+                    echo -e "${YELLOW}⚠️  Could not detect public IP${NC}"
+                    PUBLIC_IP=$(ui_input "Enter public IP:")
                 fi
-                
+
                 echo ""
-                gum style --foreground 45 "🌐 URLs disponibles:"
+
+                # Try loading cached credentials
+                CACHED_SUBDOMAIN=$(load_secret "DUCKDNS_SUBDOMAIN" 2>/dev/null) || true
+                CACHED_TOKEN=$(load_secret "DUCKDNS_TOKEN" 2>/dev/null) || true
+
+                if [ -n "$CACHED_SUBDOMAIN" ] && [ -n "$CACHED_TOKEN" ]; then
+                    echo -e "${GREEN}📋 Cached subdomain: ${CYAN}$CACHED_SUBDOMAIN${NC}"
+                    if ui_confirm "Use cached DuckDNS credentials?"; then
+                        DUCKDNS_SUBDOMAIN="$CACHED_SUBDOMAIN"
+                        DUCKDNS_TOKEN="$CACHED_TOKEN"
+                    else
+                        CACHED_SUBDOMAIN=""
+                        CACHED_TOKEN=""
+                    fi
+                fi
+
+                # Prompt if no cached credentials
+                if [ -z "$CACHED_SUBDOMAIN" ] || [ -z "$CACHED_TOKEN" ]; then
+                    DUCKDNS_SUBDOMAIN=$(ui_input "DuckDNS Subdomain (without .duckdns.org):" "my-subdomain")
+
+                    if [ -z "$DUCKDNS_SUBDOMAIN" ]; then
+                        echo -e "${RED}❌ Subdomain required${NC}"
+                        continue
+                    fi
+
+                    DUCKDNS_TOKEN=$(ui_input "DuckDNS Token:" "your-token-here" "--password")
+
+                    if [ -z "$DUCKDNS_TOKEN" ]; then
+                        echo -e "${RED}❌ Token required${NC}"
+                        continue
+                    fi
+
+                    # Save credentials for next time
+                    save_secret "DUCKDNS_SUBDOMAIN" "$DUCKDNS_SUBDOMAIN"
+                    save_secret "DUCKDNS_TOKEN" "$DUCKDNS_TOKEN"
+                fi
+
+                # Update DuckDNS
                 echo ""
-                
-                echo "$APPS" | while IFS=: read -r name port; do
-                    gum style --foreground 82 "  ✓ https://${SUBDOMAIN}.duckdns.org/${name}"
-                done
-                
+                echo -e "${BLUE}🌐 Updating DuckDNS...${NC}"
+                DUCKDNS_RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP")
+
+                if [ "$DUCKDNS_RESPONSE" = "OK" ]; then
+                    echo -e "${GREEN}✅ DuckDNS updated successfully${NC}"
+                else
+                    echo -e "${RED}❌ DuckDNS update failed: $DUCKDNS_RESPONSE${NC}"
+                    continue
+                fi
+
+                # Select environment
                 echo ""
-                gum style --foreground 226 "⚠️  Note: Le certificat HTTPS peut prendre quelques minutes"
+                ENV_NAME=$(select_environment "Select environment to publish")
+
+                if [ -z "$ENV_NAME" ]; then
+                    continue
+                fi
+
+                PORT=$(get_port_from_pm2 "$ENV_NAME")
+                if [ -z "$PORT" ]; then
+                    echo -e "${RED}❌ Could not get port for $ENV_NAME${NC}"
+                    continue
+                fi
+
+                # Generate Caddyfile
+                DOMAIN="${DUCKDNS_SUBDOMAIN}.duckdns.org"
+                CADDYFILE="/etc/caddy/Caddyfile"
+
+                # Backup existing Caddyfile
+                if [ -f "$CADDYFILE" ]; then
+                    sudo cp "$CADDYFILE" "${CADDYFILE}.backup.$(date +%s)" 2>/dev/null
+                fi
+
+                echo -e "${BLUE}🔧 Generating Caddyfile...${NC}"
+
+                sudo tee "$CADDYFILE" > /dev/null << EOF
+$DOMAIN {
+    reverse_proxy /$ENV_NAME* localhost:$PORT
+    encode gzip
+}
+EOF
+
+                echo -e "${GREEN}✅ Caddyfile generated${NC}"
+
+                # Reload Caddy
+                echo -e "${BLUE}🔄 Reloading Caddy...${NC}"
+                if sudo systemctl reload caddy; then
+                    echo -e "${GREEN}✅ Caddy reloaded${NC}"
+                    echo ""
+                    echo -e "${GREEN}🎉 SUCCESS! Your app is now available at:${NC}"
+                    echo -e "${CYAN}   https://$DOMAIN/$ENV_NAME${NC}"
+                    echo ""
+                else
+                    echo -e "${RED}❌ Failed to reload Caddy${NC}"
+                    echo -e "${YELLOW}Check logs with: sudo journalctl -u caddy -n 50${NC}"
+                fi
                 ;;
-            "👋 Quitter")
-                gum style --foreground 196 "Au revoir! 👋"
+
+            7)
+                # Batch Operations
+                show_batch_menu
+                ;;
+
+            8)
+                # Advanced Options Submenu
+                show_advanced_menu
+                ;;
+
+            9)
+                # Help
+                show_help
+                ;;
+
+            0|10)
+                echo -e "${GREEN}👋 Goodbye!${NC}"
                 exit 0
                 ;;
-            "🔍 Basculer l'inspecteur web")
-                clear
-                gum style \
-                    --foreground 212 --border-foreground 212 --border double \
-                    --align center --width 50 --margin "1 2" --padding "1 2" \
-                    "Web Inspector" "Démarrage de l'inspecteur web"
-                
-                echo ""
-                gum spin --spinner dot --title "Démarrage de l'inspecteur web..." -- sleep 1
-                
-                # Initialize web inspector
-                init_web_inspector
-                
-                echo ""
-                gum style --foreground 82 "✅ Inspecteur web démarré !"
-                gum input --placeholder "Appuyez sur Entrée pour continuer..."
+
+            *)
+                echo -e "${RED}❌ Invalid option${NC}"
                 ;;
         esac
-        
-        # Pause avant de revenir au menu
+
         echo ""
-        gum style --foreground 226 "Appuyez sur Entrée pour revenir au menu..."
+        echo -e "${YELLOW}Press Enter to continue...${NC}"
         read -r
     done
 }
 
-# Lancer le menu
+# Launch menu
 main
-

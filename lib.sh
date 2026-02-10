@@ -76,6 +76,315 @@ NC='\033[0m'
 PROJECTS_DIR="${BUILDFLOWZ_PROJECTS_DIR}"
 
 # ============================================================================
+# GUM DETECTION & UI WRAPPERS
+# ============================================================================
+
+# Detect gum availability (don't auto-install)
+if gum --version >/dev/null 2>&1; then
+    HAS_GUM=true
+else
+    HAS_GUM=false
+fi
+
+# -----------------------------------------------------------------------------
+# ui_choose - Interactive selection (gum choose || numbered list)
+#
+# Arguments:
+#   $1 - Prompt text
+#   Remaining args or stdin - Options to choose from
+#
+# Outputs:
+#   Selected value to stdout
+#
+# Returns:
+#   1 if cancelled or no selection
+# -----------------------------------------------------------------------------
+ui_choose() {
+    local prompt="$1"
+    shift
+
+    if [ "$HAS_GUM" = true ]; then
+        if [ $# -gt 0 ]; then
+            printf '%s\n' "$@" | gum choose --header "$prompt"
+        else
+            gum choose --header "$prompt"
+        fi
+    else
+        # Numbered list fallback
+        local options=()
+        if [ $# -gt 0 ]; then
+            options=("$@")
+        else
+            while IFS= read -r line; do
+                options+=("$line")
+            done
+        fi
+
+        if [ ${#options[@]} -eq 0 ]; then
+            return 1
+        fi
+
+        echo -e "${BLUE}$prompt${NC}" >&2
+        echo "" >&2
+        local i=1
+        for opt in "${options[@]}"; do
+            echo -e "  ${CYAN}$i)${NC} $opt" >&2
+            ((i++))
+        done
+        echo "" >&2
+        echo -e "  ${CYAN}0)${NC} Cancel" >&2
+        echo "" >&2
+        echo -e "${YELLOW}Choose (0-$((i-1))):${NC} \c" >&2
+        read -r choice
+
+        if [[ "$choice" == "0" ]] || [ -z "$choice" ]; then
+            return 1
+        elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $((i-1)) ]; then
+            echo "${options[$((choice-1))]}"
+            return 0
+        else
+            echo -e "${RED}Invalid choice${NC}" >&2
+            return 1
+        fi
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# ui_input - Text input (gum input || read)
+#
+# Arguments:
+#   $1 - Prompt text
+#   $2 - Placeholder text (optional)
+#   $3 - "--password" for hidden input (optional)
+#
+# Outputs:
+#   User input to stdout
+# -----------------------------------------------------------------------------
+ui_input() {
+    local prompt="$1"
+    local placeholder="${2:-}"
+    local password_flag="${3:-}"
+
+    if [ "$HAS_GUM" = true ]; then
+        if [ "$password_flag" = "--password" ]; then
+            gum input --placeholder "$placeholder" --password
+        elif [ -n "$placeholder" ]; then
+            gum input --placeholder "$placeholder"
+        else
+            gum input --placeholder "$prompt"
+        fi
+    else
+        if [ "$password_flag" = "--password" ]; then
+            echo -e "${YELLOW}${prompt}${NC} \c" >&2
+            read -rs value
+            echo "" >&2
+            echo "$value"
+        else
+            echo -e "${YELLOW}${prompt}${NC} \c" >&2
+            read -r value
+            echo "$value"
+        fi
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# ui_confirm - Yes/no confirmation (gum confirm || read)
+#
+# Arguments:
+#   $1 - Prompt text
+#
+# Returns:
+#   0 for yes, 1 for no
+# -----------------------------------------------------------------------------
+ui_confirm() {
+    local prompt="$1"
+
+    if [ "$HAS_GUM" = true ]; then
+        gum confirm "$prompt"
+    else
+        echo -e "${YELLOW}${prompt} (y/N):${NC} \c" >&2
+        read -r answer
+        case "$answer" in
+            [yY]|[yY][eE][sS]) return 0 ;;
+            *) return 1 ;;
+        esac
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# ui_header - Styled header (gum style || ANSI echo)
+#
+# Arguments:
+#   $1 - Title text
+#   $2 - Subtitle (optional)
+# -----------------------------------------------------------------------------
+ui_header() {
+    local title="$1"
+    local subtitle="${2:-}"
+
+    if [ "$HAS_GUM" = true ]; then
+        if [ -n "$subtitle" ]; then
+            gum style \
+                --foreground 212 --border-foreground 212 --border double \
+                --align center --width 50 --margin "1 2" --padding "1 2" \
+                "$title" "$subtitle"
+        else
+            gum style \
+                --foreground 212 --border-foreground 212 --border double \
+                --align center --width 50 --margin "1 2" --padding "1 2" \
+                "$title"
+        fi
+    else
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+        echo -e "               ${YELLOW}${title}${NC}"
+        if [ -n "$subtitle" ]; then
+            echo -e "             ${BLUE}${subtitle}${NC}"
+        fi
+        echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# ui_spinner - Loading indicator (gum spin || echo + run)
+#
+# Arguments:
+#   $1 - Title/message
+#   $2+ - Command to run
+# -----------------------------------------------------------------------------
+ui_spinner() {
+    local title="$1"
+    shift
+
+    if [ "$HAS_GUM" = true ]; then
+        gum spin --spinner dot --title "$title" -- "$@"
+    else
+        echo -e "${BLUE}${title}${NC}" >&2
+        "$@"
+    fi
+}
+
+# ============================================================================
+# ENVIRONMENT SELECTION
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# select_environment - Interactive environment picker with status icons
+#
+# Arguments:
+#   $1 - Prompt text (optional, default: "Select an environment")
+#
+# Outputs:
+#   Selected environment name to stdout
+#
+# Returns:
+#   0 - Selection made
+#   1 - Cancelled or no environments
+# -----------------------------------------------------------------------------
+select_environment() {
+    local prompt_text="${1:-Select an environment}"
+
+    local all_envs=$(list_all_environments)
+
+    if [ -z "$all_envs" ]; then
+        echo -e "${RED}No environments found${NC}" >&2
+        return 1
+    fi
+
+    # Build options with status icons
+    local options=()
+    while IFS= read -r env; do
+        local status=$(get_pm2_status "$env")
+        local icon=$(get_status_icon "$status")
+        options+=("${icon} ${env}")
+    done <<< "$all_envs"
+
+    # Use ui_choose for selection
+    local selected
+    selected=$(ui_choose "$prompt_text" "${options[@]}") || return 1
+
+    # Strip the icon prefix to return just the environment name
+    echo "$selected" | sed 's/^[^ ]* //'
+    return 0
+}
+
+# ============================================================================
+# CREDENTIAL CACHE
+# ============================================================================
+
+# Secrets file path
+BUILDFLOWZ_SECRETS_FILE="${BUILDFLOWZ_SECRETS_DIR}/secrets"
+
+# -----------------------------------------------------------------------------
+# save_secret - Save a key=value pair to the secrets file
+#
+# Arguments:
+#   $1 - Key name
+#   $2 - Value (will NOT be logged or echoed)
+#
+# Side Effects:
+#   Creates ~/.buildflowz/ (chmod 700) and secrets file (chmod 600) if needed
+# -----------------------------------------------------------------------------
+save_secret() {
+    local key="$1"
+    local value="$2"
+
+    # Create directory with restricted permissions
+    if [ ! -d "$BUILDFLOWZ_SECRETS_DIR" ]; then
+        mkdir -p "$BUILDFLOWZ_SECRETS_DIR"
+        chmod 700 "$BUILDFLOWZ_SECRETS_DIR"
+    fi
+
+    # Create or update secrets file
+    if [ ! -f "$BUILDFLOWZ_SECRETS_FILE" ]; then
+        touch "$BUILDFLOWZ_SECRETS_FILE"
+        chmod 600 "$BUILDFLOWZ_SECRETS_FILE"
+    else
+        # Ensure permissions are correct
+        chmod 600 "$BUILDFLOWZ_SECRETS_FILE"
+    fi
+
+    # Update existing key or append new one
+    if grep -q "^${key}=" "$BUILDFLOWZ_SECRETS_FILE" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$BUILDFLOWZ_SECRETS_FILE"
+    else
+        echo "${key}=${value}" >> "$BUILDFLOWZ_SECRETS_FILE"
+    fi
+
+    log INFO "Secret saved: $key (value hidden)"
+}
+
+# -----------------------------------------------------------------------------
+# load_secret - Load a value from the secrets file
+#
+# Arguments:
+#   $1 - Key name
+#
+# Outputs:
+#   Value to stdout
+#
+# Returns:
+#   0 - Key found
+#   1 - Key not found or file doesn't exist
+# -----------------------------------------------------------------------------
+load_secret() {
+    local key="$1"
+
+    if [ ! -f "$BUILDFLOWZ_SECRETS_FILE" ]; then
+        return 1
+    fi
+
+    local value
+    value=$(grep "^${key}=" "$BUILDFLOWZ_SECRETS_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+
+    if [ -z "$value" ]; then
+        return 1
+    fi
+
+    echo "$value"
+    return 0
+}
+
+# ============================================================================
 # STRUCTURED LOGGING
 # ============================================================================
 
@@ -1839,6 +2148,80 @@ init_web_inspector() {
 }
 
 # -----------------------------------------------------------------------------
+# toggle_web_inspector - Enable or disable web inspector for a project
+#
+# Description:
+#   Toggles the web inspector injection. If the inspector JS file exists in
+#   the project's public/ directory, it removes it and strips injected script
+#   tags. If not present, calls init_web_inspector to inject it.
+#
+# Arguments:
+#   $1 - Project directory (absolute path)
+#
+# Returns:
+#   0 - Success
+#   1 - Invalid directory
+#
+# Outputs:
+#   "Web inspector enabled" or "Web inspector disabled"
+#
+# Example:
+#   toggle_web_inspector "/root/myapp"
+# -----------------------------------------------------------------------------
+toggle_web_inspector() {
+    local project_dir=$1
+
+    if [ -z "$project_dir" ] || [ ! -d "$project_dir" ]; then
+        error "Invalid project directory: $project_dir"
+        return 1
+    fi
+
+    cd "$project_dir" || return 1
+
+    if [ -f "public/buildflowz-inspector.js" ]; then
+        # Disable: remove JS file
+        rm -f "public/buildflowz-inspector.js"
+
+        # Remove injected lines from index.html
+        if [ -f "index.html" ]; then
+            sed -i '/buildflowz-inspector/d' "index.html"
+        fi
+
+        # Remove from Astro layouts
+        for layout in src/layouts/*.astro; do
+            [ -f "$layout" ] || continue
+            sed -i '/buildflowz-inspector/d' "$layout"
+        done
+
+        # Remove from Next.js layouts
+        for candidate in "app/layout.tsx" "app/layout.jsx" "src/app/layout.tsx" "src/app/layout.jsx"; do
+            [ -f "$candidate" ] || continue
+            sed -i '/buildflowz-inspector/d' "$candidate"
+        done
+
+        # Remove from monorepo app layouts
+        for app_dir in apps/* packages/*; do
+            [ -d "$app_dir" ] || continue
+            rm -f "$app_dir/public/buildflowz-inspector.js" 2>/dev/null
+            for candidate in "$app_dir/app/layout.tsx" "$app_dir/app/layout.jsx" "$app_dir/src/app/layout.tsx" "$app_dir/src/app/layout.jsx"; do
+                [ -f "$candidate" ] || continue
+                sed -i '/buildflowz-inspector/d' "$candidate"
+            done
+        done
+
+        echo "Web inspector disabled"
+        log INFO "Web inspector disabled for $project_dir"
+    else
+        # Enable: call init_web_inspector
+        init_web_inspector
+        echo "Web inspector enabled"
+        log INFO "Web inspector enabled for $project_dir"
+    fi
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # env_remove - Remove an environment completely
 #
 # Description:
@@ -1907,6 +2290,163 @@ env_remove() {
 }
 
 # -----------------------------------------------------------------------------
+# get_status_icon - Return emoji status icon for a PM2 status string
+#
+# Arguments:
+#   $1 - PM2 status string (online, stopped, errored, error, etc.)
+#
+# Outputs:
+#   Emoji icon to stdout
+#
+# Example:
+#   icon=$(get_status_icon "online")  # Returns 🟢
+# -----------------------------------------------------------------------------
+get_status_icon() {
+    local status=$1
+    case "$status" in
+        online)        echo "🟢";;
+        stopped)       echo "🟡";;
+        errored|error) echo "🔴";;
+        *)             echo "⚪";;
+    esac
+}
+
+# ============================================================================
+# BATCH OPERATIONS
+# ============================================================================
+
+# -----------------------------------------------------------------------------
+# batch_stop_all - Stop all PM2-managed environments
+#
+# Description:
+#   Iterates all environments and stops each using env_stop().
+#
+# Returns:
+#   0 - Completed (even if some environments failed)
+# -----------------------------------------------------------------------------
+batch_stop_all() {
+    local all_envs=$(list_all_environments)
+
+    if [ -z "$all_envs" ]; then
+        echo -e "${YELLOW}No environments found${NC}"
+        return 0
+    fi
+
+    local total=$(echo "$all_envs" | wc -l)
+    echo -e "${BLUE}Stopping $total environment(s)...${NC}"
+    echo ""
+
+    local count=0
+    local failed=0
+    while IFS= read -r name; do
+        ((count++))
+        echo -e "${BLUE}[$count/$total] Stopping $name...${NC}"
+        if env_stop "$name" 2>/dev/null; then
+            echo -e "  ${GREEN}✅ $name stopped${NC}"
+        else
+            echo -e "  ${RED}❌ $name failed to stop${NC}"
+            ((failed++))
+        fi
+    done <<< "$all_envs"
+
+    invalidate_pm2_cache
+    echo ""
+    echo -e "${GREEN}Summary: $((count - failed))/$total stopped successfully${NC}"
+    if [ $failed -gt 0 ]; then
+        echo -e "${RED}$failed environment(s) failed to stop${NC}"
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# batch_start_all - Start all PM2-managed environments
+#
+# Description:
+#   Iterates all environments and starts each using env_start().
+#   Continues on individual failures.
+#
+# Returns:
+#   0 - Completed (even if some environments failed)
+# -----------------------------------------------------------------------------
+batch_start_all() {
+    local all_envs=$(list_all_environments)
+
+    if [ -z "$all_envs" ]; then
+        echo -e "${YELLOW}No environments found${NC}"
+        return 0
+    fi
+
+    local total=$(echo "$all_envs" | wc -l)
+    echo -e "${BLUE}Starting $total environment(s)...${NC}"
+    echo ""
+
+    local count=0
+    local failed=0
+    while IFS= read -r name; do
+        ((count++))
+        echo -e "${BLUE}[$count/$total] Starting $name...${NC}"
+        if env_start "$name" 2>/dev/null; then
+            echo -e "  ${GREEN}✅ $name started${NC}"
+        else
+            echo -e "  ${RED}❌ $name failed to start${NC}"
+            ((failed++))
+            log ERROR "Batch start failed for $name"
+        fi
+    done <<< "$all_envs"
+
+    invalidate_pm2_cache
+    echo ""
+    echo -e "${GREEN}Summary: $((count - failed))/$total started successfully${NC}"
+    if [ $failed -gt 0 ]; then
+        echo -e "${RED}$failed environment(s) failed to start${NC}"
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# batch_restart_all - Restart all PM2-managed environments
+#
+# Description:
+#   Iterates all environments and restarts each using env_restart().
+#
+# Returns:
+#   0 - Completed (even if some environments failed)
+# -----------------------------------------------------------------------------
+batch_restart_all() {
+    local all_envs=$(list_all_environments)
+
+    if [ -z "$all_envs" ]; then
+        echo -e "${YELLOW}No environments found${NC}"
+        return 0
+    fi
+
+    local total=$(echo "$all_envs" | wc -l)
+    echo -e "${BLUE}Restarting $total environment(s)...${NC}"
+    echo ""
+
+    local count=0
+    local failed=0
+    while IFS= read -r name; do
+        ((count++))
+        echo -e "${BLUE}[$count/$total] Restarting $name...${NC}"
+        if env_restart "$name" 2>/dev/null; then
+            echo -e "  ${GREEN}✅ $name restarted${NC}"
+        else
+            echo -e "  ${RED}❌ $name failed to restart${NC}"
+            ((failed++))
+        fi
+    done <<< "$all_envs"
+
+    invalidate_pm2_cache
+    echo ""
+    echo -e "${GREEN}Summary: $((count - failed))/$total restarted successfully${NC}"
+    if [ $failed -gt 0 ]; then
+        echo -e "${RED}$failed environment(s) failed to restart${NC}"
+    fi
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # show_dashboard - Display comprehensive dashboard with all environments
 #
 # Description:
@@ -1955,21 +2495,7 @@ show_dashboard() {
         local project_dir=$(resolve_project_path "$name")
 
         # Status indicator
-        local status_icon
-        local status_color
-        if [ "$status" = "online" ]; then
-            status_icon="🟢"
-            status_color="${GREEN}"
-        elif [ "$status" = "stopped" ]; then
-            status_icon="🟡"
-            status_color="${YELLOW}"
-        elif [ "$status" = "errored" ] || [ "$status" = "error" ]; then
-            status_icon="🔴"
-            status_color="${RED}"
-        else
-            status_icon="⚪"
-            status_color="${NC}"
-        fi
+        local status_icon=$(get_status_icon "$status")
 
         # Display environment info
         printf "  %s %-20s" "$status_icon" "$name"
