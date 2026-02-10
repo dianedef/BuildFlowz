@@ -330,6 +330,7 @@ show_advanced_menu() {
                     if [ -z "$PROJECT_DIR" ]; then
                         echo -e "${RED}❌ Project not found: $ENV_NAME${NC}"
                     else
+                        log INFO "Menu: toggling web inspector for $ENV_NAME ($PROJECT_DIR)"
                         toggle_web_inspector "$PROJECT_DIR"
                         env_restart "$ENV_NAME"
                     fi
@@ -446,6 +447,7 @@ main() {
                         else
                             SELECTED_PROJECT=$(echo "$PROJECTS" | ui_choose "Detected projects:")
                             if [ -n "$SELECTED_PROJECT" ]; then
+                                log INFO "Menu: starting project $SELECTED_PROJECT"
                                 echo -e "${GREEN}✅ Starting: $SELECTED_PROJECT${NC}"
                                 env_start "$SELECTED_PROJECT"
                             fi
@@ -507,6 +509,7 @@ main() {
                 ENV_NAME=$(select_environment "Select environment to restart")
 
                 if [ -n "$ENV_NAME" ]; then
+                    log INFO "Menu: restarting $ENV_NAME"
                     env_restart "$ENV_NAME"
                 fi
                 ;;
@@ -517,6 +520,7 @@ main() {
                 ENV_NAME=$(select_environment "Select environment to stop")
 
                 if [ -n "$ENV_NAME" ]; then
+                    log INFO "Menu: stopping $ENV_NAME"
                     echo -e "${YELLOW}🛑 Stopping $ENV_NAME...${NC}"
                     env_stop "$ENV_NAME"
                     echo -e "${GREEN}✅ Environment $ENV_NAME stopped!${NC}"
@@ -541,6 +545,7 @@ main() {
                     echo ""
 
                     if ui_confirm "Type 'yes' to confirm deletion"; then
+                        log INFO "Menu: removing environment $ENV_NAME (dir: $PROJECT_DIR)"
                         env_remove "$ENV_NAME"
                         echo -e "${GREEN}✅ Environment removed!${NC}"
                     else
@@ -615,8 +620,10 @@ main() {
                 DUCKDNS_RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP")
 
                 if [ "$DUCKDNS_RESPONSE" = "OK" ]; then
+                    log INFO "DuckDNS updated: $DUCKDNS_SUBDOMAIN → $PUBLIC_IP"
                     echo -e "${GREEN}✅ DuckDNS updated successfully${NC}"
                 else
+                    log ERROR "DuckDNS update failed for $DUCKDNS_SUBDOMAIN: $DUCKDNS_RESPONSE"
                     echo -e "${RED}❌ DuckDNS update failed: $DUCKDNS_RESPONSE${NC}"
                     continue
                 fi
@@ -644,26 +651,67 @@ main() {
                     sudo cp "$CADDYFILE" "${CADDYFILE}.backup.$(date +%s)" 2>/dev/null
                 fi
 
-                echo -e "${BLUE}🔧 Generating Caddyfile...${NC}"
+                echo -e "${BLUE}🔧 Generating Caddyfile with all online environments...${NC}"
+
+                # Build reverse_proxy routes for ALL online environments with ports
+                ROUTES=""
+                ALL_ENVS=$(list_all_environments)
+                SELECTED_INCLUDED=false
+                if [ -n "$ALL_ENVS" ]; then
+                    while IFS= read -r env; do
+                        [ -z "$env" ] && continue
+                        local env_status=$(get_pm2_status "$env")
+                        local env_port=$(get_port_from_pm2 "$env")
+                        if [ "$env_status" = "online" ] && [ -n "$env_port" ]; then
+                            ROUTES="${ROUTES}    reverse_proxy /${env}* localhost:${env_port}"$'\n'
+                            echo -e "  ${GREEN}✓${NC} /${env} → localhost:${env_port}"
+                            if [ "$env" = "$ENV_NAME" ]; then
+                                SELECTED_INCLUDED=true
+                            fi
+                        fi
+                    done <<< "$ALL_ENVS"
+                fi
+
+                # Also include the selected environment even if not yet online
+                if [ "$SELECTED_INCLUDED" = "false" ]; then
+                    ROUTES="${ROUTES}    reverse_proxy /${ENV_NAME}* localhost:${PORT}"$'\n'
+                    echo -e "  ${GREEN}✓${NC} /${ENV_NAME} → localhost:${PORT} (selected)"
+                fi
 
                 sudo tee "$CADDYFILE" > /dev/null << EOF
-$DOMAIN {
-    reverse_proxy /$ENV_NAME* localhost:$PORT
-    encode gzip
+${DOMAIN} {
+${ROUTES}    encode gzip
 }
 EOF
 
-                echo -e "${GREEN}✅ Caddyfile generated${NC}"
+                log INFO "Caddyfile generated for $DOMAIN with routes for all online environments"
+                echo -e "${GREEN}✅ Caddyfile generated with all routes${NC}"
 
                 # Reload Caddy
                 echo -e "${BLUE}🔄 Reloading Caddy...${NC}"
                 if sudo systemctl reload caddy; then
+                    log INFO "Caddy reloaded successfully for $DOMAIN"
                     echo -e "${GREEN}✅ Caddy reloaded${NC}"
                     echo ""
-                    echo -e "${GREEN}🎉 SUCCESS! Your app is now available at:${NC}"
-                    echo -e "${CYAN}   https://$DOMAIN/$ENV_NAME${NC}"
+                    echo -e "${GREEN}🎉 SUCCESS! Published URLs:${NC}"
+                    # Show all published routes
+                    if [ -n "$ALL_ENVS" ]; then
+                        while IFS= read -r env; do
+                            [ -z "$env" ] && continue
+                            local env_s=$(get_pm2_status "$env")
+                            local env_p=$(get_port_from_pm2 "$env")
+                            if [ "$env_s" = "online" ] && [ -n "$env_p" ]; then
+                                echo -e "${CYAN}   https://$DOMAIN/$env${NC}"
+                            fi
+                        done <<< "$ALL_ENVS"
+                    fi
+                    # Ensure selected env is shown
+                    if ! echo "$ALL_ENVS" | grep -q "^${ENV_NAME}$" || [ "$(get_pm2_status "$ENV_NAME")" != "online" ]; then
+                        echo -e "${CYAN}   https://$DOMAIN/$ENV_NAME${NC} (selected)"
+                    fi
                     echo ""
                 else
+                    log ERROR "Failed to reload Caddy for $DOMAIN"
                     echo -e "${RED}❌ Failed to reload Caddy${NC}"
                     echo -e "${YELLOW}Check logs with: sudo journalctl -u caddy -n 50${NC}"
                 fi

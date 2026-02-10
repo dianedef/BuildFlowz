@@ -2039,6 +2039,7 @@ init_web_inspector() {
     local script_path="${SCRIPT_DIR}/injectors/web-inspector.js"
 
     if [ ! -f "$script_path" ]; then
+        log ERROR "Web inspector script not found at $script_path"
         echo "Error: Web inspector script not found at $script_path"
         return 1
     fi
@@ -2075,6 +2076,7 @@ init_web_inspector() {
             fi
         done
         if [ "$injected" = false ]; then
+            log WARNING "No layout with </body> found for Astro project"
             echo "Warning: No layout with </body> found for Astro project"
         fi
     else
@@ -2119,6 +2121,7 @@ init_web_inspector() {
 
         if [ "$is_nextjs" = true ]; then
             if [ -z "$layout_file" ]; then
+                log WARNING "Next.js project detected but no app/layout found"
                 echo "Warning: Next.js project detected but no app/layout found"
             elif grep -q "buildflowz-inspector" "$layout_file"; then
                 echo "Script already present in $layout_file"
@@ -2136,10 +2139,12 @@ init_web_inspector() {
                     sed -i "s|</body>|        ${nextjs_script}\n      </body>|" "$layout_file"
                     echo "Injected Script component into $layout_file"
                 else
+                    log WARNING "No </body> tag found in $layout_file"
                     echo "Warning: No </body> tag found in $layout_file"
                 fi
             fi
         else
+            log WARNING "Could not find injection target (no index.html, Astro layout, or Next.js layout)"
             echo "Warning: Could not find injection target (no index.html, Astro layout, or Next.js layout)"
         fi
     fi
@@ -2333,6 +2338,7 @@ batch_stop_all() {
     fi
 
     local total=$(echo "$all_envs" | wc -l)
+    log INFO "Batch stop initiated for $total environment(s)"
     echo -e "${BLUE}Stopping $total environment(s)...${NC}"
     echo ""
 
@@ -2345,6 +2351,7 @@ batch_stop_all() {
             echo -e "  ${GREEN}✅ $name stopped${NC}"
         else
             echo -e "  ${RED}❌ $name failed to stop${NC}"
+            log ERROR "Batch stop failed for $name"
             ((failed++))
         fi
     done <<< "$all_envs"
@@ -2352,6 +2359,7 @@ batch_stop_all() {
     invalidate_pm2_cache
     echo ""
     echo -e "${GREEN}Summary: $((count - failed))/$total stopped successfully${NC}"
+    log INFO "Batch stop complete: $((count - failed))/$total succeeded, $failed failed"
     if [ $failed -gt 0 ]; then
         echo -e "${RED}$failed environment(s) failed to stop${NC}"
     fi
@@ -2377,6 +2385,7 @@ batch_start_all() {
     fi
 
     local total=$(echo "$all_envs" | wc -l)
+    log INFO "Batch start initiated for $total environment(s)"
     echo -e "${BLUE}Starting $total environment(s)...${NC}"
     echo ""
 
@@ -2389,14 +2398,15 @@ batch_start_all() {
             echo -e "  ${GREEN}✅ $name started${NC}"
         else
             echo -e "  ${RED}❌ $name failed to start${NC}"
-            ((failed++))
             log ERROR "Batch start failed for $name"
+            ((failed++))
         fi
     done <<< "$all_envs"
 
     invalidate_pm2_cache
     echo ""
     echo -e "${GREEN}Summary: $((count - failed))/$total started successfully${NC}"
+    log INFO "Batch start complete: $((count - failed))/$total succeeded, $failed failed"
     if [ $failed -gt 0 ]; then
         echo -e "${RED}$failed environment(s) failed to start${NC}"
     fi
@@ -2421,6 +2431,7 @@ batch_restart_all() {
     fi
 
     local total=$(echo "$all_envs" | wc -l)
+    log INFO "Batch restart initiated for $total environment(s)"
     echo -e "${BLUE}Restarting $total environment(s)...${NC}"
     echo ""
 
@@ -2433,6 +2444,7 @@ batch_restart_all() {
             echo -e "  ${GREEN}✅ $name restarted${NC}"
         else
             echo -e "  ${RED}❌ $name failed to restart${NC}"
+            log ERROR "Batch restart failed for $name"
             ((failed++))
         fi
     done <<< "$all_envs"
@@ -2440,6 +2452,7 @@ batch_restart_all() {
     invalidate_pm2_cache
     echo ""
     echo -e "${GREEN}Summary: $((count - failed))/$total restarted successfully${NC}"
+    log INFO "Batch restart complete: $((count - failed))/$total succeeded, $failed failed"
     if [ $failed -gt 0 ]; then
         echo -e "${RED}$failed environment(s) failed to restart${NC}"
     fi
@@ -2767,6 +2780,7 @@ deploy_github_project() {
         echo -e "${GREEN}✅ Repository cloned successfully${NC}"
     else
         echo ""
+        log ERROR "Failed to clone repository: $repo_url"
         echo -e "${RED}❌ Failed to clone repository${NC}"
         echo -e "${YELLOW}Please check:${NC}"
         echo -e "  • Repository exists: https://github.com/$github_user/$repo_name"
@@ -2780,6 +2794,7 @@ deploy_github_project() {
     echo ""
     echo -e "${YELLOW}🔧 Initializing Flox environment...${NC}"
     if ! init_flox_env "$project_dir" "$project_name"; then
+        log ERROR "Flox initialization failed for $project_name at $project_dir"
         echo -e "${RED}❌ Flox initialization failed${NC}"
         echo -e "${YELLOW}Cleanup: Removing project directory${NC}"
         rm -rf "$project_dir"
@@ -2790,6 +2805,7 @@ deploy_github_project() {
     echo ""
     echo -e "${GREEN}🚀 Starting application...${NC}"
     if ! env_start "$project_name"; then
+        log ERROR "Failed to start application after deploy: $project_name"
         echo -e "${RED}❌ Failed to start application${NC}"
         echo -e "${YELLOW}Project cloned but not started. Try manually:${NC}"
         echo -e "  cd $project_dir"
