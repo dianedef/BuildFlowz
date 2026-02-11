@@ -1920,7 +1920,16 @@ env_start() {
         [ -z "$port" ] && return 1
         echo -e "${BLUE}🔌 Nouveau port assigné: $port${NC}"
     else
-        echo -e "${BLUE}🔌 Port persistant réutilisé: $port${NC}"
+        # Verify persistent port isn't already taken by another PM2 app
+        local other_app=$(get_pm2_data_cached | awk -F'|' -v p="$port" -v n="$env_name" '$3 == p && $1 != n {print $1}')
+        if [ -n "$other_app" ] || is_port_in_use "$port"; then
+            warning "Port $port (persistant) déjà utilisé par ${other_app:-un autre processus}, recherche d'un nouveau port..."
+            port=$(find_available_port 3000)
+            [ -z "$port" ] && return 1
+            echo -e "${BLUE}🔌 Nouveau port assigné: $port${NC}"
+        else
+            echo -e "${BLUE}🔌 Port persistant réutilisé: $port${NC}"
+        fi
     fi
     
     echo -e "${BLUE}🚀 Commande: $dev_cmd${NC}"

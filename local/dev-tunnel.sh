@@ -131,6 +131,23 @@ if [ -z "$PORTS" ]; then
     exit 1
 fi
 
+# Detect port collisions before creating tunnels
+declare -A PORT_MAP
+COLLISION=false
+IFS=',' read -ra CHECK_ARRAY <<< "$PORTS"
+for port_info in "${CHECK_ARRAY[@]}"; do
+    IFS=':' read -r port name <<< "$port_info"
+    if [ -n "${PORT_MAP[$port]+x}" ]; then
+        echo -e "${RED}⚠ COLLISION: port $port utilisé par ${PORT_MAP[$port]} ET $name${NC}"
+        COLLISION=true
+    fi
+    PORT_MAP[$port]="$name"
+done
+if [ "$COLLISION" = true ]; then
+    echo -e "${YELLOW}⚠ Des collisions de ports ont été détectées!${NC}"
+    echo -e "${YELLOW}  Relancez les apps en conflit sur le serveur avec: env_start \"app_name\"${NC}"
+fi
+
 # Arrêter les tunnels existants
 echo -e "${BLUE}🛑 Arrêt des tunnels existants...${NC}"
 pkill -f "autossh.*$REMOTE_HOST" 2>/dev/null || true
