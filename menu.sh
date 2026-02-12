@@ -421,7 +421,11 @@ main() {
                         # Auto-detect projects
                         echo -e "${BLUE}🔍 Scanning $PROJECTS_DIR for projects...${NC}"
 
-                        EXISTING_ENVS=$(find "$PROJECTS_DIR" -maxdepth 4 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
+                        EXISTING_ENVS=$(find "$PROJECTS_DIR" -maxdepth 4 \
+                            \( -name "node_modules" -o -name ".git" -o -name "venv" -o -name ".venv" \
+                               -o -name "__pycache__" -o -name "target" -o -name ".next" -o -name ".nuxt" \
+                               -o -name "dist" -o -name ".cache" -o -name ".pnpm" -o -name ".yarn" \) -prune \
+                            -o -type d -name ".flox" -print 2>/dev/null | while read -r flox_dir; do
                             proj_dir=$(dirname "$flox_dir")
                             case "$proj_dir" in
                                 "$PROJECTS_DIR"/.*) continue ;;
@@ -429,7 +433,11 @@ main() {
                             esac
                         done | sort -u)
 
-                        NEW_PROJECTS=$(find "$PROJECTS_DIR" -maxdepth 4 -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) 2>/dev/null | while read -r manifest; do
+                        NEW_PROJECTS=$(find "$PROJECTS_DIR" -maxdepth 4 \
+                            \( -name "node_modules" -o -name ".git" -o -name "venv" -o -name ".venv" \
+                               -o -name "__pycache__" -o -name "target" -o -name ".next" -o -name ".nuxt" \
+                               -o -name "dist" -o -name ".cache" -o -name ".pnpm" -o -name ".yarn" \) -prune \
+                            -o -type f \( -name "package.json" -o -name "requirements.txt" -o -name "Cargo.toml" -o -name "go.mod" \) -print 2>/dev/null | while read -r manifest; do
                             proj_dir=$(dirname "$manifest")
                             case "$proj_dir" in
                                 "$PROJECTS_DIR"/.*) continue ;;

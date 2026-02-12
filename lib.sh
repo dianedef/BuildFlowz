@@ -1047,7 +1047,11 @@ resolve_project_path() {
 # List all environments (projects with Flox env)
 list_all_environments() {
     if [ -d "$PROJECTS_DIR" ]; then
-        find "$PROJECTS_DIR" -maxdepth 4 -type d -name ".flox" 2>/dev/null | while read -r flox_dir; do
+        find "$PROJECTS_DIR" -maxdepth 4 \
+            \( -name "node_modules" -o -name ".git" -o -name "venv" -o -name ".venv" \
+               -o -name "__pycache__" -o -name "target" -o -name ".next" -o -name ".nuxt" \
+               -o -name "dist" -o -name ".cache" -o -name ".pnpm" -o -name ".yarn" \) -prune \
+            -o -type d -name ".flox" -print 2>/dev/null | while read -r flox_dir; do
             # Extract the project name from the path, e.g., /root/my-robots/chatbot/.flox -> chatbot
             echo "$(basename "$(dirname "$flox_dir")")"
         done | grep -v "^\.$" | sort
@@ -1936,7 +1940,14 @@ env_start() {
     
     # Replace $PORT in dev_cmd with actual port value
     local final_cmd="${dev_cmd//\$PORT/$port}"
-    
+
+    # For Doppler projects, override PORT after doppler injects its env vars
+    # to prevent Doppler's PORT value from taking precedence over BuildFlowz's assignment
+    local inner_cmd="$final_cmd"
+    if [ -n "$doppler_prefix" ]; then
+        inner_cmd="env PORT=$port $final_cmd"
+    fi
+
     # Create persistent ecosystem file
     cat > "$pm2_config" <<EOF
 module.exports = {
@@ -1944,7 +1955,7 @@ module.exports = {
     name: "$env_name",
     cwd: "$project_dir",
     script: "bash",
-    args: ["-c", "export PORT=$port && flox activate -- ${doppler_prefix}$final_cmd"],
+    args: ["-c", "export PORT=$port && flox activate -- ${doppler_prefix}${inner_cmd}"],
     env: {
       PORT: $port
     },
@@ -2356,7 +2367,7 @@ batch_stop_all() {
     while IFS= read -r name; do
         ((count++))
         echo -e "${BLUE}[$count/$total] Stopping $name...${NC}"
-        if env_stop "$name" 2>/dev/null; then
+        if env_stop "$name" >/dev/null 2>&1; then
             echo -e "  ${GREEN}✅ $name stopped${NC}"
         else
             echo -e "  ${RED}❌ $name failed to stop${NC}"
@@ -2403,7 +2414,7 @@ batch_start_all() {
     while IFS= read -r name; do
         ((count++))
         echo -e "${BLUE}[$count/$total] Starting $name...${NC}"
-        if env_start "$name" 2>/dev/null; then
+        if env_start "$name" >/dev/null 2>&1; then
             echo -e "  ${GREEN}✅ $name started${NC}"
         else
             echo -e "  ${RED}❌ $name failed to start${NC}"
@@ -2449,7 +2460,7 @@ batch_restart_all() {
     while IFS= read -r name; do
         ((count++))
         echo -e "${BLUE}[$count/$total] Restarting $name...${NC}"
-        if env_restart "$name" 2>/dev/null; then
+        if env_restart "$name" >/dev/null 2>&1; then
             echo -e "  ${GREEN}✅ $name restarted${NC}"
         else
             echo -e "  ${RED}❌ $name failed to restart${NC}"
